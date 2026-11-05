@@ -54,3 +54,17 @@ def test_schema_requires_flat_zero_volume_fills_s12(minutes):
     minutes.loc[0, ["open", "high", "low", "close"]] = minutes.loc[0, "close"]
     minutes.loc[0, "volume"] = 0.0
     validate_minutes(minutes)
+
+
+def test_schema_rejects_unsorted_minutes_s3(minutes):
+    with pytest.raises(ValueError, match="must increase within each symbol"):
+        validate_minutes(minutes.iloc[::-1])
+
+
+def test_schema_allows_interleaved_symbols_s3(minutes):
+    other_symbol = minutes.assign(symbol="OTHER")
+    frame = pd.concat([minutes, other_symbol]).iloc[[0, 2, 1, 3]].copy()
+    frame["ts_utc"] += pd.to_timedelta([2, 0, 2, 0], unit="min")
+    validate_minutes(frame)
+    with pytest.raises(ValueError, match="must increase within each symbol"):
+        validate_minutes(frame.iloc[[0, 3, 2, 1]])

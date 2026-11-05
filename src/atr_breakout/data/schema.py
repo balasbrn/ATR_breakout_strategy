@@ -1,7 +1,8 @@
 """Standard minute frame shared by vendor adapters and synthetic fixtures.
 
-Timestamps label minute opens. Missing minutes are allowed. Volume may be
-missing when unavailable, and filled rows represent flat, zero-volume bars.
+Timestamps label minute opens and increase within each symbol. Missing minutes
+are allowed. Volume may be missing when unavailable, and filled rows represent
+flat, zero-volume bars.
 """
 
 import numpy as np
@@ -34,6 +35,8 @@ def validate_minutes(frame: pd.DataFrame) -> None:
         raise ValueError("symbol must contain nonblank strings")
     if frame.duplicated(["symbol", "ts_utc"]).any():
         raise ValueError("Minute timestamps must be unique per symbol")
+    if not frame.groupby("symbol", sort=False)["ts_utc"].is_monotonic_increasing.all():
+        raise ValueError("Minute timestamps must increase within each symbol")
 
     for name in (*PRICE_COLUMNS, "volume"):
         dtype = frame[name].dtype
