@@ -24,7 +24,7 @@ def generate_minutes(seed=17):
             if impulse:
                 price += impulse * 0.05
             elif follow_through:
-                price += follow_through * 0.01
+                price += follow_through * 0.004
             else:
                 price += rng.uniform(-0.001 if quiet else -0.025,
                                      0.001 if quiet else 0.025)
