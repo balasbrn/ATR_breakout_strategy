@@ -79,3 +79,22 @@ Same as the live deliveries, so the ML project's loader reads both: parquet part
 `entry/`, `exit/`, `outcome/` by `day_key`, one `manifest.json` (partitions with row counts and
 sha256, `synthetic: false`, `card_version`, code commit) and a `manifest.json.sha256` sidecar.
 Synthetic runs set `synthetic: true`.
+
+## 6. Historical export and live compatibility
+
+The writer takes a local copy of the pinned Trade555 schema and verifies its SHA-256.
+The run directory contains a `public/` delivery and a sibling `event_map.parquet`.
+Share only the public directory. It contains the three partitioned tables, the manifest,
+and its checksum. Optional completed higher-timeframe, benchmark, and liquidity context
+is supplied by the caller. Missing context is marked explicitly on the card.
+
+The historical signal uses the frozen calendar-day ATR rank. The exported ATR percentage
+is multiplied by 100 for the live card's percentage unit. EMA uses Trade555's SMA seed
+and partial warmup. RSI uses the same Wilder calculation and flat-series convention.
+
+Public action reasons use the pinned schema's vocabulary. Busy maps to
+`SYMBOL_ALREADY_OPEN`, entry gap to `ORDER_UNFILLED`, study boundary to
+`TIME_FILTER_VETO`, and crypto purity to `ATR_VETO`. The private map keeps
+the original statuses and the bot's gross and net 1R values. The public bot cost
+fields use the schema's basis-point and ATR units. For blocked signals the
+schema requires a bot outcome object, with its trade values null.
