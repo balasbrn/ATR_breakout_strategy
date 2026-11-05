@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ATR Breakout Pre-registration</title>
+
+<style>
+/* Layout: a research report. Status strip → hypothesis + schematic → rules → evaluation path → spokes timeline → costs → scorecard (empty) → metrics template → risks → provenance. Dark-first Trade555 style; mono for numbers and rule text. */
+:root {
+  --bg: #090d13; --surface: #0d1117; --subtle: #161b22; --border: #30363d; --hair: #21262d;
+  --ink: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --accent-bg: rgba(56,139,253,.10);
+  --good: #3fb950; --good-bg: rgba(63,185,80,.12); --bad: #f85149; --bad-bg: rgba(248,81,73,.12);
+  --warn: #d29922; --warn-bg: rgba(210,153,34,.12); --band: rgba(139,148,158,.18); --line: #8b949e;
+  --dev: #58a6ff; --oos: #a371f7; --hold: #d29922;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #f6f8fa; --surface: #ffffff; --subtle: #eef1f4; --border: #d0d7de; --hair: #e3e7eb;
+  --ink: #1f2328; --muted: #59636e; --accent: #0969da; --accent-bg: rgba(9,105,218,.08);
+  --good: #1a7f37; --good-bg: rgba(26,127,55,.10); --bad: #cf222e; --bad-bg: rgba(207,34,46,.08);
+  --warn: #9a6700; --warn-bg: rgba(154,103,0,.10); --band: rgba(89,99,110,.14); --line: #59636e;
+  --dev: #0969da; --oos: #8250df; --hold: #9a6700; color-scheme: light } }
+:root[data-theme="light"] {
+  --bg: #f6f8fa; --surface: #ffffff; --subtle: #eef1f4; --border: #d0d7de; --hair: #e3e7eb;
+  --ink: #1f2328; --muted: #59636e; --accent: #0969da; --accent-bg: rgba(9,105,218,.08);
+  --good: #1a7f37; --good-bg: rgba(26,127,55,.10); --bad: #cf222e; --bad-bg: rgba(207,34,46,.08);
+  --warn: #9a6700; --warn-bg: rgba(154,103,0,.10); --band: rgba(89,99,110,.14); --line: #59636e;
+  --dev: #0969da; --oos: #8250df; --hold: #9a6700; color-scheme: light }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 15px/1.6 var(--sans); margin: 0 }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 24px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 36px }
+h1, h2, h3 { margin: 0; text-wrap: balance }
+h1 { font: 700 1.55rem/1.3 var(--mono); letter-spacing: -.5px }
+h2 { font: 600 .85rem var(--mono); text-transform: uppercase; letter-spacing: .6px; color: var(--muted); display: flex; gap: 10px; align-items: baseline }
+h2 .sec { color: var(--accent) }
+h3 { font: 700 .98rem var(--mono) }
+p { margin: 0; max-width: 72ch }
+section { display: flex; flex-direction: column; gap: 14px; min-width: 0 }
+.sub { color: var(--muted); font: .8rem var(--mono) }
+.num, code { font-family: var(--mono); font-variant-numeric: tabular-nums }
+code { font-size: .86em; background: var(--subtle); padding: 1px 5px; border-radius: 4px }
+header { display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--border); padding-bottom: 18px }
+.badges { display: flex; gap: 8px; flex-wrap: wrap }
+.badge { display: inline-block; font: 600 .68rem var(--mono); padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap }
+.b-frozen { background: var(--accent-bg); color: var(--accent) } .b-pend { background: var(--band); color: var(--muted) }
+.b-warn { background: var(--warn-bg); color: var(--warn) } .b-good { background: var(--good-bg); color: var(--good) } .b-bad { background: var(--bad-bg); color: var(--bad) }
+.status { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px }
+.stat { background: var(--surface); border: 1px solid var(--hair); border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px }
+.stat .k { font: .68rem var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .5px }
+.stat .v { font: 700 .95rem var(--mono) }
+.panel { background: var(--surface); border: 1px solid var(--hair); border-radius: 6px; padding: 16px; min-width: 0 }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px }
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px }
+.rule { background: var(--surface); border: 1px solid var(--hair); border-radius: 6px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0 }
+.rule .t { font: 700 .82rem var(--mono); color: var(--accent) }
+.rule pre { margin: 0; font: .78rem/1.5 var(--mono); white-space: pre-wrap; color: var(--ink) }
+.rule p { font-size: .86rem; color: var(--muted) }
+.flow { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; align-items: stretch }
+.flow li { display: flex; gap: 6px; align-items: stretch }
+.step { background: var(--surface); border: 1px solid var(--hair); border-radius: 6px; padding: 10px 12px; width: 178px; display: flex; flex-direction: column; gap: 4px }
+.step strong { font: 700 .82rem var(--mono) } .step span.d { font-size: .78rem; color: var(--muted) }
+.arrow { color: var(--muted); align-self: center; font-family: var(--mono) }
+.tablewrap { overflow-x: auto; border: 1px solid var(--hair); border-radius: 6px; background: var(--surface) }
+table { border-collapse: collapse; width: 100%; font: .8rem var(--mono); font-variant-numeric: tabular-nums }
+th { background: var(--subtle); color: var(--muted); font-weight: 400; text-transform: uppercase; font-size: .68rem; letter-spacing: .5px; text-align: left; padding: 8px 10px; white-space: nowrap }
+td { padding: 8px 10px; border-top: 1px solid var(--hair); white-space: nowrap; vertical-align: top }
+td.wrap { white-space: normal; min-width: 240px }
+td.r, th.r { text-align: right }
+.pend { color: var(--muted) }
+.cell { display: inline-block; min-width: 72px; text-align: center; border: 1px dashed var(--border); border-radius: 4px; padding: 2px 6px; color: var(--muted); font-size: .72rem }
+svg { display: block; width: 100%; height: auto; overflow: visible }
+svg text { font-family: var(--mono); fill: var(--muted) }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font: .74rem var(--mono); color: var(--muted) }
+.legend span { display: inline-flex; gap: 6px; align-items: center }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block }
+.note { border: 1px solid var(--hair); background: var(--surface); border-radius: 6px; padding: 12px 14px; font-size: .88rem }
+.note b { font-family: var(--mono); font-size: .82rem }
+.risks { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px }
+.risk { background: var(--surface); border: 1px solid var(--hair); border-radius: 6px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px }
+.risk h3 { font-size: .86rem }
+.risk p { font-size: .86rem; color: var(--muted) }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; align-self: flex-start }
+.seg button { background: var(--subtle); color: var(--ink); border: 0; padding: 6px 12px; font: .78rem var(--mono); cursor: pointer }
+.seg button + button { border-left: 1px solid var(--border) }
+.seg button[aria-pressed="true"] { background: var(--accent-bg); color: var(--accent) }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.calc { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: end }
+.calc label { display: flex; flex-direction: column; gap: 4px; font: .72rem var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .4px }
+.calc input, .calc select { font: 700 .95rem var(--mono); background: var(--bg); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px }
+.calc .out { font: 700 1.3rem var(--mono) }
+footer { color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 6px }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="badges"><span class="badge b-frozen">Trade_research3</span><span class="badge b-frozen">Pre-registration · frozen 2026-11-05</span><span class="badge b-pend">Results pending</span><span class="badge b-warn">Pass 1 · bare signal, no filters</span></div>
+    <h1>ATR_breakout_strategy</h1>
+    <div class="sub" style="font-size:.95rem;color:var(--ink)">ATR-compressed 20-bar high/low breakout · version v1</div>
+    <p>After a quiet stretch, does a strong 15-minute close beyond the last 20 bars' extreme keep going far enough to pay for itself? Tested first <b>before costs</b> (is there any edge at all?), then <b>after costs</b> (is it still profitable?), on each market separately.</p>
+    <div class="status">
+      <div class="stat"><span class="k">Contract</span><span class="v">v1 · frozen</span><span class="sub">changes = v1.1, new contract</span></div>
+      <div class="stat"><span class="k">Stage A · gross</span><span class="v pend">not run</span></div>
+      <div class="stat"><span class="k">Stage B · net</span><span class="v pend">not run</span></div>
+      <div class="stat"><span class="k">Holdout</span><span class="v pend">locked</span><span class="sub">runs once, only if A and B pass</span></div>
+    </div>
+  </header>
+
+  <section aria-labelledby="h1s">
+    <h2 id="h1s"><span class="sec">§1</span>The idea, drawn</h2>
+    <div class="two">
+      <div class="panel">
+        <svg id="schematic" viewBox="0 0 560 300" role="img" aria-label="Schematic of a breakout trade: quiet range, breakout bar, entry at next open, stop at breakout bar low, bar-5 check and 20-bar maximum hold"></svg>
+        <div class="legend"><span><i class="sw" style="background:var(--band)"></i>Prior 20 bars (quiet)</span><span><i class="sw" style="background:var(--good)"></i>Breakout bar t</span><span><i class="sw" style="background:var(--bad)"></i>Stop = 1R</span><span>Schematic, not data</span></div>
+      </div>
+      <div class="note" style="display:flex;flex-direction:column;gap:10px">
+        <p><b>Hypothesis.</b> After volatility compression, a close beyond the prior 20-bar extreme with a strong impulse produces positive net R over the next 20 bars.</p>
+        <p><b>Prediction, not assumption:</b> positive drift after the breakout.</p>
+        <p><b>Also measured:</b> the share of trades that cross an overnight boundary on cash markets.</p>
+        <p><b>1R</b> is the distance from entry to the stop. A result of +0.10 R means the average trade made a tenth of what it risked.</p>
+        <p class="sub">Measured per spoke, never pooled.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h4">
+    <h2 id="h4"><span class="sec">§3–5</span>The rules, frozen</h2>
+    <div class="rules">
+      <div class="rule"><span class="t">Bars and ATR</span><pre>15-min bars from validated 1-min data
+ATR(14), Wilder smoothing
+ATR_pct = ATR / Close</pre><p>Ranked as a percentage so US splits (unadjusted data) don't create jumps.</p></div>
+      <div class="rule"><span class="t">Compression (t−1)</span><pre>ATR_Rank_30d[t-1] &lt;= 20</pre><p>Volatility is in the quietest fifth of the last 30 calendar days.</p></div>
+      <div class="rule"><span class="t">Breakout (t)</span><pre>Long:  Close[t] &gt; max(High[t-20:t-1])
+       Close−Open &gt;= 1.2 × ATR[t-1]
+Short: Close[t] &lt; min(Low[t-20:t-1])
+       Open−Close &gt;= 1.2 × ATR[t-1]</pre><p>A close beyond the range, on a strong bar.</p></div>
+      <div class="rule"><span class="t">Entry, stop, 1R</span><pre>Entry  Open[t+1]
+Long   stop Low[t],  1R = Open[t+1] − Low[t]
+Short  stop High[t], 1R = High[t] − Open[t+1]</pre><p>One open position per symbol; a signal on a busy symbol is skipped (<code>skipped_busy</code>).</p></div>
+      <div class="rule"><span class="t">Gap rule</span><pre>Long:  Open[t+1] &lt;= Low[t]  → cancel
+Short: Open[t+1] &gt;= High[t] → cancel</pre><p>Counted as <code>skipped_gap</code>, excluded from R.</p></div>
+      <div class="rule"><span class="t">Bar 5 and exit</span><pre>At Close[t+5]: not in profit → exit
+              in profit → stop to entry + cost
+Any remaining → exit at Close[t+20]</pre><p>Stops checked intrabar; a hit exits at the stop level.</p></div>
+    </div>
+    <p class="sub">Fixed parameters, chosen by reasoning before any data: 20 · 30 · 20 · 1.2 · 14 · 5 · 20 bars. No volume, funding, spread or order-book inputs.</p>
+  </section>
+
+  <section aria-labelledby="hpath">
+    <h2 id="hpath"><span class="sec">§6 · §10</span>How the result is decided</h2>
+    <ol class="flow" id="flow"></ol>
+    <div class="note"><b>Order matters.</b> Stage A (gross) results are written down before Stage B (net) is computed. If Stage A fails, Stage B is still reported, but the strategy is recorded as having <em>no gross edge</em>. Failing means: reported as failed, no re-tuning under v1.</div>
+  </section>
+
+  <section aria-labelledby="hsp">
+    <h2 id="hsp"><span class="sec">§2 · §8</span>Spokes and data split</h2>
+    <div class="panel">
+      <svg id="timeline" viewBox="0 0 720 230" role="img" aria-label="Development, out-of-sample and holdout periods per spoke from 2011 to 2026"></svg>
+      <div class="legend"><span><i class="sw" style="background:var(--dev)"></i>Development</span><span><i class="sw" style="background:var(--oos)"></i>Out-of-sample</span><span><i class="sw" style="background:var(--hold)"></i>Holdout (run once)</span><span><i class="sw" style="background:var(--band)"></i>Reserved, not used (crypto 2025+ for H16)</span></div>
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Spoke</th><th>Data</th><th>Universe</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><b>US stocks</b></td><td>Alpaca SIP 1-min, raw, regular hours</td><td>50 (GOOG+GOOGL = 1)</td><td class="wrap">Chosen by 2026 popularity. Late starters: PLTR 2020-09-30, COIN 2021-04-14, NU 2021-12-09.</td></tr>
+        <tr><td><b>NSE</b></td><td>Kite, adjusted, real volume</td><td>233</td><td class="wrap">Point-in-time index membership not applied in Pass 1.</td></tr>
+        <tr><td><b>Crypto</b></td><td>Kraken spot 1-min (proxy for perpetuals)</td><td>coins passing the completeness rule</td><td class="wrap">BTC, ETH, SOL etc. are candidates, not assumed. BNB and HYPE excluded (no pre-2025 data).</td></tr>
+        <tr><td><b>FX and gold</b></td><td>cTrader, tick volume (unused)</td><td>major FX + XAUUSD</td><td class="wrap">Uniform cost table across the spoke.</td></tr>
+      </tbody></table></div>
+  </section>
+
+  <section aria-labelledby="hcost">
+    <h2 id="hcost"><span class="sec">§6</span>Costs, and why they can decide the answer</h2>
+    <div class="two">
+      <div class="tablewrap"><table>
+        <thead><tr><th>Spoke</th><th class="r">Base bp</th><th class="r">Stress bp</th><th>Basis</th></tr></thead>
+        <tbody>
+          <tr><td>US stocks</td><td class="r">4.9</td><td class="r">9.9</td><td class="wrap">Commission + slippage, <code>live_journal_costs_v1.json</code> @ 38f2b23</td></tr>
+          <tr><td>NSE equities</td><td class="r">10.6</td><td class="r">15.6</td><td class="wrap">Zerodha intraday formula @ 0b2d4d3</td></tr>
+          <tr><td>Crypto (perp model)</td><td class="r">12.0</td><td class="r">23.0</td><td class="wrap">10 bp taker + 2 bp slippage; stress uses 13 bp measured on 12 live trades</td></tr>
+          <tr><td>FX majors</td><td class="r">1.5</td><td class="r">3.0</td><td class="wrap">Cross-spoke cost card</td></tr>
+          <tr><td>XAUUSD</td><td class="r">1.5</td><td class="r">3.0</td><td class="wrap">Same table; gold spreads may be wider</td></tr>
+        </tbody></table></div>
+      <div class="panel" style="display:flex;flex-direction:column;gap:12px">
+        <h3>Cost in R: try it</h3>
+        <p style="font-size:.9rem">Costs are charged in price, but results are in R. A tight stop makes 1R small, so the same fee is a bigger share of it. Net R = gross R − cost ÷ 1R.</p>
+        <div class="calc">
+          <label for="c-spoke">Spoke<select id="c-spoke"><option value="4.9|9.9">US stocks</option><option value="10.6|15.6">NSE</option><option value="12|23">Crypto</option><option value="1.5|3">FX / gold</option></select></label>
+          <label for="c-risk">1R as % of price<input id="c-risk" type="number" step="0.05" min="0.01" value="0.40"></label>
+          <div><div class="sub">Cost per trade in R</div><div class="out" id="c-out"></div><div class="sub" id="c-out2"></div></div>
+        </div>
+        <p class="sub">Example arithmetic only, not a result. A gross edge smaller than this number disappears after costs. The cost-to-ATR filter is a Pass 2 item, not part of v1.</p>
+      </div>
+    </div>
+    <div class="note"><b>Caveats recorded with the costs.</b> The FX 1.5 bp card lists US at 2 bp while the journal gives 4.9 bp, so both base and stress are pre-registered. Crypto prices are spot but costs model perpetuals; basis is not modelled. Crypto base slippage (2 bp) is below the 13 bp measured, so base is the optimistic case and stress the realistic one. Funding is not modelled (≈ 0.7 bp per 5-hour hold on the Prop account). The pass rule uses the base case.</div>
+  </section>
+
+  <section aria-labelledby="hscore">
+    <h2 id="hscore"><span class="sec">§10</span>Scorecard</h2>
+    <p>Every cell fills in when the run is published. A spoke survives only if all four rules pass on development <b>and</b> out-of-sample, in <b>both</b> stages.</p>
+    <div class="seg" role="group" aria-label="Stage"><button type="button" id="st-a" aria-pressed="true">Stage A · gross</button><button type="button" id="st-b" aria-pressed="false">Stage B · net, base</button></div>
+    <div class="tablewrap"><table id="score"></table></div>
+    <div class="legend"><span><span class="badge b-good">pass</span></span><span><span class="badge b-bad">fail</span></span><span><span class="cell">pending</span> not yet run</span></div>
+  </section>
+
+  <section aria-labelledby="hmet">
+    <h2 id="hmet"><span class="sec">§7 · §9</span>Results tables to be filled</h2>
+    <div class="seg" role="group" aria-label="Spoke"><button type="button" data-sp="US stocks" aria-pressed="true">US stocks</button><button type="button" data-sp="NSE" aria-pressed="false">NSE</button><button type="button" data-sp="Crypto" aria-pressed="false">Crypto</button><button type="button" data-sp="FX and gold" aria-pressed="false">FX and gold</button></div>
+    <div class="tablewrap"><table id="metrics"></table></div>
+    <p class="sub" id="metric-note"></p>
+    <div class="two">
+      <div class="panel"><h3>Mean R by year (per spoke)</h3><svg id="yearly" viewBox="0 0 520 170" role="img" aria-label="Empty chart frame for mean R by year, awaiting results"></svg><p class="sub">Bars appear here, one per calendar year, dev / OOS / holdout shaded.</p></div>
+      <div class="panel"><h3>Signal vs benchmarks</h3><svg id="bench" viewBox="0 0 520 170" role="img" aria-label="Empty chart frame comparing the signal with random entry, breakout without compression, and buy-and-hold"></svg><p class="sub">The signal must beat random entry on the same R definition. Buy-and-hold is context only.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="hlit">
+    <h2 id="hlit"><span class="sec">Refs</span>Research behind this test</h2>
+    <p>Papers and books that shaped the idea and the test design. They inspire the rules; none of them tests this exact rule. No peer-reviewed study we found tests an intraday "volatility compression, then breakout" rule across these markets, which is the gap this test is meant to fill. This list is kept in a separate references file, so the frozen contract text stays unchanged.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Source</th><th>Type</th><th>What it found</th><th>How it shapes this test</th></tr></thead>
+      <tbody>
+        <tr><td colspan="4" style="background:var(--subtle);color:var(--accent);font-weight:700">The breakout idea</td></tr>
+        <tr><td class="wrap"><b>Brock, Lakonishok &amp; LeBaron (1992)</b>, "Simple Technical Trading Rules and the Stochastic Properties of Stock Returns", <i>Journal of Finance</i> 47(5), 1731–1764</td><td>Peer-reviewed</td><td class="wrap">On the Dow Jones 1897–1986, buying when price breaks above its recent high (the "trading range break") was followed by higher returns than selling at a break below the low.</td><td class="wrap">The core rule: a close beyond the prior 20-bar high or low. Tested here on 15-minute bars instead of daily.</td></tr>
+        <tr><td class="wrap"><b>Gao, Han, Li &amp; Zhou (2018)</b>, "Market Intraday Momentum", <i>Journal of Financial Economics</i> 129(2), 394–414</td><td>Peer-reviewed</td><td class="wrap">Intraday moves carry on within the day: the S&amp;P 500's first half-hour return predicts its last half-hour.</td><td class="wrap">Support for the idea that a strong intraday move can continue over the next hours (20 bars ≈ 5 hours).</td></tr>
+        <tr><td class="wrap"><b>Zarattini, Barbon &amp; Aziz (2024)</b>, "A Profitable Day Trading Strategy for the U.S. Equity Market", Swiss Finance Institute Research Paper 24-98</td><td>Working paper</td><td class="wrap">An opening-range breakout on US stocks was profitable after costs, mainly on "stocks in play". An independent replication found the gross effect but little left after spreads.</td><td class="wrap">A modern intraday breakout with costs. The replication is why this test reports gross and net separately.</td></tr>
+        <tr><td colspan="4" style="background:var(--subtle);color:var(--accent);font-weight:700">Why compression first</td></tr>
+        <tr><td class="wrap"><b>Bollerslev (1986)</b>, "Generalized Autoregressive Conditional Heteroskedasticity", <i>Journal of Econometrics</i> 31(3), 307–327</td><td>Peer-reviewed</td><td class="wrap">Volatility clusters and reverts to its average: quiet periods tend to be followed by more active ones.</td><td class="wrap">The reason to wait for compression (ATR in the lowest 20% of 30 days) before a breakout.</td></tr>
+        <tr><td class="wrap"><b>Wilder (1978)</b>, <i>New Concepts in Technical Trading Systems</i></td><td>Book, practitioner</td><td class="wrap">Defines the Average True Range and its smoothing.</td><td class="wrap">ATR(14) with Wilder smoothing.</td></tr>
+        <tr><td class="wrap"><b>Crabel (1990)</b>, <i>Day Trading with Short Term Price Patterns and Opening Range Breakout</i></td><td>Book, practitioner</td><td class="wrap">Describes narrow-range days followed by range expansion.</td><td class="wrap">The "contraction, then expansion" idea. Not peer-reviewed, so it inspires but proves nothing.</td></tr>
+        <tr><td colspan="4" style="background:var(--subtle);color:var(--accent);font-weight:700">Guard rails for the test</td></tr>
+        <tr><td class="wrap"><b>Sullivan, Timmermann &amp; White (1999)</b>, "Data-Snooping, Technical Trading Rule Performance, and the Bootstrap", <i>Journal of Finance</i> 54(5), 1647–1691</td><td>Peer-reviewed</td><td class="wrap">Re-tested Brock et al. allowing for the many rules tried; the best rules lost their edge in later data.</td><td class="wrap">Why the rules are frozen in advance, out-of-sample is required, and the holdout runs once.</td></tr>
+        <tr><td class="wrap"><b>Park &amp; Irwin (2007)</b>, "What Do We Know About the Profitability of Technical Analysis?", <i>Journal of Economic Surveys</i> 21(4), 786–826</td><td>Peer-reviewed survey</td><td class="wrap">Many studies report profits, but many have data-snooping, cost or risk problems.</td><td class="wrap">Why costs, a random-entry benchmark and the best-symbol-removed check are part of the pass rule.</td></tr>
+        <tr><td class="wrap"><b>Harvey, Liu &amp; Zhu (2016)</b>, "… and the Cross-Section of Expected Returns", <i>Review of Financial Studies</i> 29(1), 5–68</td><td>Peer-reviewed</td><td class="wrap">With many strategies tested, a t-statistic of 2 is too easy; they argue for about 3.</td><td class="wrap">Context for the t ≥ 2 rule: a pass at t ≈ 2 is a first step, not proof.</td></tr>
+        <tr><td class="wrap"><b>Petersen (2009)</b>, "Estimating Standard Errors in Finance Panel Data Sets", <i>Review of Financial Studies</i> 22(1), 435–480</td><td>Peer-reviewed</td><td class="wrap">When observations share a common shock, standard errors must be clustered or they are too small.</td><td class="wrap">Standard errors clustered by calendar date, because breakouts bunch on volatile days.</td></tr>
+      </tbody></table></div>
+  </section>
+
+  <section aria-labelledby="hrisk">
+    <h2 id="hrisk"><span class="sec">§11</span>What kills it, and known risks</h2>
+    <div class="risks">
+      <div class="risk"><h3>Fails rules 1–3</h3><p>No edge at these costs in this period. Reported as failed; no re-tuning under v1.</p></div>
+      <div class="risk"><h3>Passes dev and OOS, fails holdout</h3><p>Recorded as "did not survive the holdout".</p></div>
+      <div class="risk"><h3>Survivorship and look-ahead</h3><p>US list chosen for 2026 popularity; crypto list omits dead coins. Positive results may be inflated. Shown on every result.</p></div>
+      <div class="risk"><h3>Costs dominate</h3><p>The 3× cost-to-ATR constraint is not in Pass 1; it becomes a Pass 2 filter only if a gross edge exists.</p></div>
+      <div class="risk"><h3>Spot vs perpetual</h3><p>Crypto history is spot; costs model perpetuals. Basis and funding not modelled.</p></div>
+      <div class="risk"><h3>Small crypto sample</h3><p>The completeness rule may leave 1–3 coins. Reported as low-power and never pooled.</p></div>
+    </div>
+    <div class="note"><b>Crypto data rules (O5).</b> Keep a coin only if ≥ 90% of minutes are present in every calendar year of its dev and holdout windows. Fill isolated gaps with a flat bar marked as filled, and report counts. No entry if bar t, any of t+1…t+5, or more than two of t−20…t−1 contain more than 3 filled minutes. A secondary row with crypto dev from 2019-01-01 is declared now and reported beside the primary, not used for pass/fail.</div>
+  </section>
+
+  <footer>
+    <div><b>Provenance, filled at publication:</b> repository <span class="num">Trade_research3</span> (to be created) · report path <span class="cell">pending</span> · code commit <span class="cell">pending</span> · script <span class="cell">pending</span> · data checksums per spoke <span class="cell">pending</span> · run date <span class="cell">pending</span></div>
+    <div>Contract text: ATR_breakout_strategy v1 pre-registration, frozen 2026-11-05 (drafted as "S1", renamed before publication). Every number on this page is copied from the contract; no result has been computed. The schematic and empty chart frames are layout only.</div>
+  </footer>
+</div>
+
+<script>
+const NS = "http://www.w3.org/2000/svg";
+const el = (t, a, p) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; };
+
+/* Schematic: candles drawn by hand to explain the rules (not data). */
+(function () {
+  const svg = document.getElementById("schematic");
+  const quiet = [[100.2,100.6,99.9,100.4],[100.4,100.7,100.1,100.3],[100.3,100.6,100.0,100.1],[100.1,100.5,99.8,100.4],[100.4,100.8,100.2,100.5],[100.5,100.7,100.1,100.2],[100.2,100.6,99.9,100.4],[100.4,100.9,100.2,100.6],[100.6,100.8,100.2,100.3],[100.3,100.7,100.0,100.5]];
+  const after = [[101.75,102.3,101.6,102.1],[102.1,102.5,101.8,102.4],[102.4,102.6,102.0,102.2],[102.2,102.9,102.1,102.7],[102.7,103.0,102.3,102.8]];
+  const brk = [100.55, 101.9, 100.4, 101.8];
+  const all = [...quiet, brk, ...after], lo = 99.4, hi = 103.4, L = 30, R = 540, T = 24, B = 250;
+  const x = i => L + 12 + i * ((R - L - 24) / (all.length - 1)), y = v => B - (v - lo) / (hi - lo) * (B - T), w = 14;
+  el("rect", { x: x(0) - 12, y: y(100.9), width: x(9) - x(0) + 24, height: y(99.8) - y(100.9), fill: "var(--band)", rx: 4 }, svg);
+  el("text", { x: x(0) - 8, y: y(100.9) - 6, "font-size": 10 }, svg).textContent = "prior 20 bars: quiet, ATR rank ≤ 20";
+  el("line", { x1: x(0) - 12, x2: x(10) + 10, y1: y(100.9), y2: y(100.9), stroke: "var(--muted)", "stroke-dasharray": "4 3" }, svg);
+  el("text", { x: x(0) - 8, y: y(100.9) + 14, "font-size": 9.5 }, svg).textContent = "20-bar high";
+  all.forEach(([o, h, l, c], i) => {
+    const up = c >= o, isB = i === 10, col = isB ? "var(--good)" : "var(--line)";
+    el("line", { x1: x(i), x2: x(i), y1: y(h), y2: y(l), stroke: col, "stroke-width": 1.5 }, svg);
+    el("rect", { x: x(i) - w / 2, y: y(Math.max(o, c)), width: w, height: Math.max(2, Math.abs(y(o) - y(c))), fill: up ? col : "var(--surface)", stroke: col, "stroke-width": 1.5, rx: 2 }, svg);
+  });
+  el("line", { x1: x(10), x2: x(10), y1: y(101.9) - 4, y2: y(103.2) + 4, stroke: "var(--good)", "stroke-dasharray": "2 2" }, svg);
+  el("text", { x: x(10), y: y(103.2), "text-anchor": "middle", "font-size": 10, style: "fill:var(--good)" }, svg).textContent = "t: close > 20-bar high, body ≥ 1.2×ATR";
+  el("line", { x1: x(10) - 10, x2: R, y1: y(100.4), y2: y(100.4), stroke: "var(--bad)", "stroke-width": 1.5 }, svg);
+  el("text", { x: R, y: y(100.4) + 14, "text-anchor": "end", "font-size": 10, style: "fill:var(--bad)" }, svg).textContent = "stop = Low[t]";
+  el("circle", { cx: x(11) - w / 2, cy: y(101.75), r: 4, fill: "var(--accent)" }, svg);
+  el("text", { x: x(11) - w / 2 - 6, y: y(101.75) + 16, "text-anchor": "end", "font-size": 10, style: "fill:var(--accent)" }, svg).textContent = "entry Open[t+1]";
+  el("line", { x1: x(11) + 18, x2: x(11) + 18, y1: y(101.75), y2: y(100.4), stroke: "var(--ink)" }, svg);
+  el("text", { x: x(11) + 22, y: (y(101.75) + y(100.4)) / 2 + 3, "font-size": 10, style: "fill:var(--ink)" }, svg).textContent = "1R";
+  el("line", { x1: x(15), x2: x(15), y1: T, y2: B, stroke: "var(--warn)", "stroke-dasharray": "3 3" }, svg);
+  el("text", { x: x(15) - 4, y: B + 16, "text-anchor": "end", "font-size": 10, style: "fill:var(--warn)" }, svg).textContent = "bar 5: exit, or move stop to entry + cost";
+  el("text", { x: x(15) - 4, y: B + 32, "text-anchor": "end", "font-size": 10 }, svg).textContent = "then exit at bar 20 at the latest";
+})();
+
+/* Evaluation path */
+document.getElementById("flow").innerHTML = [
+  ["Build 15-min bars", "Validated 1-min data; crypto completeness rule"],
+  ["Stage A · gross", "Cost 0; bar-5 stop to breakeven. Written down first"],
+  ["Stage B · net", "Base cost (pass rule) and stress cost (reported)"],
+  ["Rules 1–4", "Dev and OOS, each spoke, both stages"],
+  ["Holdout · once", "Only if A and B pass: gross > 0 and net > 0"]
+].map(([t, d], i) => `<li>${i ? '<span class="arrow" aria-hidden="true">→</span>' : ""}<div class="step"><span class="sub">Step ${i + 1} · <span class="badge b-pend">pending</span></span><strong>${t}</strong><span class="d">${d}</span></div></li>`).join("");
+
+/* Timeline of splits */
+(function () {
+  const svg = document.getElementById("timeline"), L = 110, R = 700, t0 = 2011, t1 = 2027;
+  const x = d => { const [Y, M, D] = d.split("-").map(Number); return L + ((Y + (M - 1) / 12 + (D - 1) / 365) - t0) / (t1 - t0) * (R - L); };
+  for (let yr = 2011; yr <= 2027; yr += 2) { el("line", { x1: x(yr + "-01-01"), x2: x(yr + "-01-01"), y1: 8, y2: 196, stroke: "var(--hair)" }, svg);
+    el("text", { x: x(yr + "-01-01"), y: 214, "text-anchor": "middle", "font-size": 10 }, svg).textContent = yr; }
+  const rows = [
+    ["US stocks", [["2019-10-01", "2021-12-31", "dev"], ["2022-01-01", "2022-12-31", "oos"], ["2023-01-01", "2026-09-30", "hold"]]],
+    ["NSE", [["2015-01-01", "2020-12-31", "dev"], ["2021-01-01", "2022-12-31", "oos"], ["2023-01-01", "2026-09-30", "hold"]]],
+    ["Crypto", [["2013-01-01", "2021-12-31", "dev"], ["2022-01-01", "2022-12-31", "oos"], ["2023-01-01", "2024-12-31", "hold"], ["2025-01-01", "2026-09-30", "res"]]],
+    ["FX and gold", [["2011-01-01", "2020-12-31", "dev"], ["2021-01-01", "2022-12-31", "oos"], ["2023-01-01", "2026-09-30", "hold"]]]
+  ];
+  const col = { dev: "var(--dev)", oos: "var(--oos)", hold: "var(--hold)", res: "var(--band)" };
+  rows.forEach(([name, segs], i) => {
+    const y = 18 + i * 46;
+    el("text", { x: L - 10, y: y + 15, "text-anchor": "end", "font-size": 12, style: "fill:var(--ink);font-weight:700" }, svg).textContent = name;
+    for (const [a, b, k] of segs) el("rect", { x: x(a), y, width: Math.max(2, x(b) - x(a) - 2), height: 22, rx: 4, fill: col[k], "fill-opacity": k === "res" ? 1 : .8 }, svg);
+    if (name === "Crypto") el("text", { x: x("2013-01-01") + 4, y: y + 36, "font-size": 9.5 }, svg).textContent = "dev starts at each coin's first usable date (shown from 2013)";
+  });
+})();
+
+/* Cost calculator */
+(function () {
+  const sp = document.getElementById("c-spoke"), rk = document.getElementById("c-risk"), out = document.getElementById("c-out"), out2 = document.getElementById("c-out2");
+  const upd = () => { const [b, s] = sp.value.split("|").map(Number), r = parseFloat(rk.value);
+    if (!(r > 0)) { out.textContent = "—"; out2.textContent = "enter a positive 1R %"; return; }
+    out.textContent = (b / 100 / r).toFixed(3) + " R"; out2.textContent = `base ${b} bp · stress ${s} bp → ${(s / 100 / r).toFixed(3)} R`; };
+  sp.addEventListener("change", upd); rk.addEventListener("input", upd); upd();
+})();
+
+/* Scorecard template */
+const SPOKES = ["US stocks", "NSE", "Crypto", "FX and gold"];
+const RULES = [["1", "Mean R > 0"], ["2", "Mean R > random entry"], ["3", "Mean R > 0 without best symbol"], ["4", "t ≥ 2 (dev + OOS, clustered by date)"]];
+function score(stage) {
+  const head = `<thead><tr><th>Rule · ${stage}</th>${SPOKES.map(s => `<th colspan="2">${s}</th>`).join("")}</tr><tr><th></th>${SPOKES.map(() => "<th>Dev</th><th>OOS</th>").join("")}</tr></thead>`;
+  const body = RULES.map(([n, t]) => `<tr><td>${n} · ${t}</td>${SPOKES.map(() => n === "4" ? `<td colspan="2"><span class="cell">pending</span></td>` : `<td><span class="cell">pending</span></td><td><span class="cell">pending</span></td>`).join("")}</tr>`).join("");
+  const verdict = `<tr><td><b>Spoke verdict</b></td>${SPOKES.map(() => `<td colspan="2"><span class="cell">pending</span></td>`).join("")}</tr>`;
+  document.getElementById("score").innerHTML = head + "<tbody>" + body + verdict + "</tbody>";
+}
+for (const [id, s] of [["st-a", "Stage A · gross R"], ["st-b", "Stage B · net R, base"]]) document.getElementById(id).addEventListener("click", () => {
+  document.getElementById("st-a").setAttribute("aria-pressed", id === "st-a"); document.getElementById("st-b").setAttribute("aria-pressed", id === "st-b"); score(s); });
+score("Stage A · gross R");
+
+/* Metrics template */
+const METRICS = ["Trades", "Mean gross R", "Mean net R · base", "Mean net R · stress", "Hit rate", "Average win R", "Average loss R", "skipped_gap", "skipped_busy", "Crosses overnight (cash spokes)", "Mean R without best symbol", "Random entry · mean R", "Breakout without compression · mean R", "Buy-and-hold (context)", "Filled 1-min bars (crypto)"];
+function metrics(sp) {
+  const cols = ["Development", "Out-of-sample", "Holdout"];
+  const na = m => (m.includes("overnight") && (sp === "Crypto" || sp === "FX and gold")) || (m.includes("crypto") && sp !== "Crypto");
+  document.getElementById("metrics").innerHTML = `<thead><tr><th>${sp}</th>${cols.map(c => `<th class="r">${c}</th>`).join("")}</tr></thead><tbody>` +
+    METRICS.map(m => `<tr><td>${m}</td>${cols.map(c => `<td class="r">${na(m) ? '<span class="pend">n/a</span>' : c === "Holdout" ? '<span class="cell">locked</span>' : '<span class="cell">pending</span>'}</td>`).join("")}</tr>`).join("") + "</tbody>";
+  document.getElementById("metric-note").textContent = sp === "Crypto" ? "Crypto: primary row (coins passing the completeness rule) plus a secondary row with dev from 2019-01-01, reported side by side. Low power; never pooled." : sp === "US stocks" ? "US: survivorship caveat applies (list chosen by 2026 popularity). Results by year are reported for 2019–2026." : sp === "NSE" ? "NSE: point-in-time membership not applied in Pass 1." : "FX and gold: one cost table for the whole spoke; tick volume not used.";
+}
+document.querySelectorAll("[data-sp]").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("[data-sp]").forEach(o => o.setAttribute("aria-pressed", o === b)); metrics(b.dataset.sp); }));
+metrics("US stocks");
+
+/* Empty chart frames */
+function frame(id, labels, note) {
+  const svg = document.getElementById(id), L = 50, R = 510, T = 10, B = 130, y0 = (T + B) / 2;
+  for (const [v, yy] of [["+0.2 R", T + 10], ["0", y0], ["−0.2 R", B - 10]]) { el("line", { x1: L, x2: R, y1: yy, y2: yy, stroke: v === "0" ? "var(--muted)" : "var(--hair)", "stroke-dasharray": v === "0" ? "" : "3 3" }, svg);
+    el("text", { x: L - 6, y: yy + 3, "text-anchor": "end", "font-size": 9.5 }, svg).textContent = v; }
+  const step = (R - L) / labels.length;
+  labels.forEach((l, i) => { el("rect", { x: L + i * step + step * .2, y: y0 - 18, width: step * .6, height: 18, fill: "none", stroke: "var(--border)", "stroke-dasharray": "3 3", rx: 3 }, svg);
+    el("text", { x: L + i * step + step / 2, y: B + 18, "text-anchor": "middle", "font-size": 9.5 }, svg).textContent = l; });
+  el("text", { x: (L + R) / 2, y: T + 4, "text-anchor": "middle", "font-size": 10, style: "fill:var(--muted)" }, svg).textContent = note;
+}
+frame("yearly", ["2019", "2020", "2021", "2022", "2023", "2024", "2025", "2026"], "awaiting results");
+frame("bench", ["Signal", "Random", "No compression", "Buy & hold"], "awaiting results");
+</script>
+</body>
+</html>
