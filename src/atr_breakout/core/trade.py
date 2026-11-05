@@ -57,7 +57,7 @@ def _resolve_exit(
 
 
 def simulate_trades(
-    bars: pd.DataFrame, directions: pd.Series, *, cost_bp: float
+    bars: pd.DataFrame, directions: pd.Series, *, cost_bp: float, independent: bool = False
 ) -> list[SignalResult]:
     """Simulate one cost case on a single symbol's permitted bars.
 
@@ -65,6 +65,7 @@ def simulate_trades(
     already eligible directions and only bars the study is allowed to read.
     A signal needs the full trade window even if it would have exited early.
     All result bar references are integer positions in the supplied frame.
+    Independent benchmark draws may overlap.
     """
     if not bars.index.equals(directions.index) or not directions.isin([-1, 0, 1]).all():
         raise ValueError("Directions must align with bars and be -1, 0 or 1")
@@ -82,7 +83,7 @@ def simulate_trades(
         if signal_bar + MAX_HOLD_BARS >= len(bars):
             results.append(SignalResult(signal_bar, direction, "SKIPPED_BOUNDARY"))
             continue
-        if signal_bar < last_exit:
+        if not independent and signal_bar < last_exit:
             results.append(SignalResult(signal_bar, direction, "SKIPPED_BUSY"))
             continue
 
