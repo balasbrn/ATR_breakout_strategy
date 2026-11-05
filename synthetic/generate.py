@@ -44,3 +44,38 @@ def generate_frame(seed=17):
         for minute in generate_minutes(seed)
     )
     return pd.DataFrame.from_records(rows, columns=MINUTE_COLUMNS)
+
+
+def write_study_fixture(directory):
+    """Write a small canonical CRYPTO dataset for the M4 dry run."""
+    import hashlib
+    import json
+
+    import pandas as pd
+
+    directory.mkdir(mode=0o700)
+    frame = generate_frame()
+    partitions = []
+    for offset in (0, 365):
+        shifted = frame.assign(ts_utc=frame["ts_utc"] + pd.Timedelta(days=offset))
+        for day, rows in shifted.groupby(shifted["ts_utc"].dt.date):
+            path = directory / f"{day}.parquet"
+            rows.to_parquet(path, index=False)
+            partitions.append({
+                "date": day.isoformat(), "path": path.name,
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            })
+    manifest = directory / "minutes.json"
+    manifest.write_text(json.dumps({
+        "market": "CRYPTO", "synthetic": True, "partitions": partitions,
+    }, indent=2) + "\n")
+    return manifest
+
+
+if __name__ == "__main__":
+    import argparse
+    from pathlib import Path
+
+    parser = argparse.ArgumentParser(description="Write the seeded v1 study fixture")
+    parser.add_argument("--out", type=Path, required=True)
+    print(write_study_fixture(parser.parse_args().out))
