@@ -19,8 +19,7 @@ BOT_REASONS = {
 }
 ACTIONS = {
     "TAKEN": "SIGNAL_ACCEPTED", "SKIPPED_BUSY": "SYMBOL_ALREADY_OPEN",
-    "SKIPPED_GAP": "ORDER_UNFILLED", "SKIPPED_BOUNDARY": "TIME_FILTER_VETO",
-    "SKIPPED_PURITY": "ATR_VETO",
+    "SKIPPED_GAP": "ORDER_UNFILLED",
 }
 
 
@@ -129,6 +128,15 @@ def build_cards(
         asset = "COMMODITY_CFD" if market == "FX_GOLD" and symbol == "XAUUSD" else MARKET_CLASS[market]
         at = bar.ts_utc + BAR_SIZE
         identity = keys.identify(market, symbol, asset, at, bar.trading_date)
+        tables["event_map"].append({
+            **identity, "market": market, "symbol": symbol, "signal_time": at.isoformat(),
+            "trading_date": bar.trading_date.isoformat(), "status": status,
+            "bot_exit_reason": trade.exit_reason if trade else None,
+            "bot_gross_r": trade.r_gross if trade else None, "bot_net_r": trade.r_net if trade else None,
+        })
+        if status in ("SKIPPED_BOUNDARY", "SKIPPED_PURITY"):
+            continue
+
         prior = bars.iloc[index - 1]
         trigger = {"name": "atr_breakout_v1", "values": {
             "atr_rank_prev": float(prior.atr_rank_30d),
@@ -193,13 +201,7 @@ def build_cards(
                 **exit_identity, **common, **snapshot(bars, position, market, context, cost_bp=bp),
                 "exit_track": track, "exit_reason": reason,
                 "bot_exit_reason": bot_reason if track == "BOT_ACTUAL" else None,
+                # Trade555 build.py:405–409 at f4fe9a2 uses snapshot closes.
                 "bars_held": held, "move_since_entry_atr": float(direction * (end.close - bar.close) / atr),
             })
-
-        tables["event_map"].append({
-            **identity, "market": market, "symbol": symbol, "signal_time": at.isoformat(),
-            "trading_date": bar.trading_date.isoformat(), "status": status,
-            "bot_exit_reason": trade.exit_reason if trade else None,
-            "bot_gross_r": trade.r_gross if trade else None, "bot_net_r": trade.r_net if trade else None,
-        })
     return tables

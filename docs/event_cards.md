@@ -93,8 +93,14 @@ is multiplied by 100 for the live card's percentage unit. EMA uses Trade555's SM
 and partial warmup. RSI uses the same Wilder calculation and flat-series convention.
 
 Public action reasons use the pinned schema's vocabulary. Busy maps to
-`SYMBOL_ALREADY_OPEN`, entry gap to `ORDER_UNFILLED`, study boundary to
-`TIME_FILTER_VETO`, and crypto purity to `ATR_VETO`. The private map keeps
-the original statuses and the bot's gross and net 1R values. The public bot cost
+`SYMBOL_ALREADY_OPEN` and entry gap to `ORDER_UNFILLED`. Study boundary and crypto
+purity skips appear only in the private event map with their original statuses.
+The private map also keeps the bot's gross and net 1R values. The public bot cost
 fields use the schema's basis-point and ATR units. For blocked signals the
 schema requires a bot outcome object, with its trade values null.
+
+The [Trade555 range and move definitions](https://github.com/balasbrn/Trade555/blob/f4fe9a253dedadb297ea8be6522eba6d1bd6a62c/src/trade555/event_cards/features.py#L371-L384)
+use a 0–100 range position and the four oldest-first close differences divided by
+the snapshot's ATR. The [continuous session function](https://github.com/balasbrn/Trade555/blob/f4fe9a253dedadb297ea8be6522eba6d1bd6a62c/src/trade555/event_cards/features.py#L437-L441)
+assigns crypto and FX to ASIA, EUROPE, or US using the snapshot's UTC time, with
+transitions at 08:00 and 16:00.

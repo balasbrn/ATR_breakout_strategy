@@ -57,16 +57,13 @@ def test_entry_outcome_and_private_mapping_cards(bars):
 @pytest.mark.parametrize(("status", "public_reason"), [
     ("SKIPPED_BUSY", "SYMBOL_ALREADY_OPEN"),
     ("SKIPPED_GAP", "ORDER_UNFILLED"),
-    ("SKIPPED_BOUNDARY", "TIME_FILTER_VETO"),
-    ("SKIPPED_PURITY", "ATR_VETO"),
 ])
 def test_blocked_signals_have_no_actual_track_cards(bars, status, public_reason):
     directions = pd.Series(0, index=bars.index)
     directions.iloc[3000] = 1
-    purity = pd.Series(status != "SKIPPED_PURITY", index=bars.index)
-    actual = [] if status == "SKIPPED_PURITY" else [SignalResult(3000, 1, status)]
+    actual = [SignalResult(3000, 1, status)]
     cards = build_cards(
-        bars, directions, actual, market="CRYPTO", purity=purity,
+        bars, directions, actual, market="CRYPTO",
         keys=CardKeys({"CRYPTO": date(2021, 1, 1)}),
     )
     outcome, = cards["outcome"]
@@ -172,10 +169,44 @@ def test_cash_plan_exits_at_signal_session_close_cards(bars):
     frame["trading_date"] = frame["ts_utc"].dt.date
     directions = pd.Series([0, 1, 0], index=frame.index)
     cards = build_cards(
-        frame, directions, [SignalResult(1, 1, "SKIPPED_BOUNDARY")], market="US",
+        frame, directions, [SignalResult(1, 1, "SKIPPED_BUSY")], market="US",
         keys=CardKeys({"US": date(2021, 1, 1)}),
     )
     outcome, = cards["outcome"]
     assert outcome["card_plan"]["plan_result"] == "SESSION_CLOSE"
     assert outcome["card_plan"]["bars_held"] == 0
     assert outcome["card_plan"]["plan_r"] == 0
+
+
+def test_boundary_and_purity_skips_stay_in_private_map_cards(bars):
+    directions = signal_directions(bars)
+    purity = pd.Series(True, index=bars.index)
+    purity.iloc[3076] = False
+    cards = build_cards(
+        bars, directions, [SignalResult(3000, 1, "SKIPPED_BOUNDARY")],
+        market="CRYPTO", purity=purity,
+        keys=CardKeys({"CRYPTO": date(2021, 1, 1)}),
+    )
+    assert not any(cards[table] for table in ("entry", "exit", "outcome"))
+    assert [row["status"] for row in cards["event_map"]] == ["SKIPPED_BOUNDARY", "SKIPPED_PURITY"]
+
+
+def test_range_scale_and_last_four_moves_match_live_cards(bars):
+    frame = bars.iloc[2981:3001].copy()
+    frame[["low", "high"]] = [90.0, 110.0]
+    frame.loc[2996:3000, "close"] = [99.0, 100.0, 97.0, 101.0, 105.0]
+    frame.loc[3000, "atr"] = 2
+    fields = snapshot(frame, 19, "CRYPTO", CardContext(), cost_bp=12)
+    assert fields["range20_pos"] == 75
+    assert fields["last4_moves"] == [0.5, -1.5, 2, 2]
+
+
+@pytest.mark.parametrize("market", ["CRYPTO", "FX_GOLD"])
+@pytest.mark.parametrize(("opened", "phase"), [
+    ("07:30", "ASIA"), ("07:45", "EUROPE"), ("15:45", "US"), ("23:45", "ASIA"),
+])
+def test_continuous_phase_uses_utc_snapshot_time_cards(bars, market, opened, phase):
+    frame = bars.iloc[[3000]].copy()
+    frame["ts_utc"] = pd.Timestamp(f"2021-02-01 {opened}Z")
+    fields = snapshot(frame, 0, market, CardContext(), cost_bp=12)
+    assert fields["session_phase"] == phase

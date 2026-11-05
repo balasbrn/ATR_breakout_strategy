@@ -55,11 +55,12 @@ def _last_completed(frame, cutoff, prior_date=None):
     return eligible.iloc[-1] if not eligible.empty else None
 
 
-def _phase(market, timestamp):
+def _phase(market, opened, at):
     if market not in CASH_SESSIONS:
-        return ("ASIA", "EUROPE", "US")[timestamp.hour // 8]
+        # Trade555 event_cards/features.py:437–441 at f4fe9a2 uses UTC signal time.
+        return ("ASIA", "EUROPE", "US")[at.hour // 8]
     zone, opening, closing = CASH_SESSIONS[market]
-    local = timestamp.tz_convert(zone)
+    local = opened.tz_convert(zone)
     minute = local.hour * 60 + local.minute
     return "OPEN" if minute - opening < 60 else "LATE" if closing - minute <= 60 else "MID"
 
@@ -86,7 +87,9 @@ def snapshot(
         "cost_rt_pct_of_atr": 100 * round_trip_cost(close, cost_bp) / atr if atr > 0 else None,
         "cost_source_expected": "MODELLED_FIXED",
         "rsi14": float(bar.rsi14) if pd.notna(bar.rsi14) else None,
+        # Trade555 event_cards/features.py:371–379 at f4fe9a2 uses percent.
         "range20_pos": float(100 * (close - low) / (high - low)) if len(local_window) == 20 and high > low else None,
+        # Trade555 event_cards/features.py:380–384 at f4fe9a2 uses snapshot ATR.
         "last4_moves": (past["close"].iloc[-5:].diff().iloc[1:] / atr).tolist() if len(past) >= 5 and atr > 0 else None,
         "vol_rel20": float(volume / vol_mean) if market != "FX_GOLD" and pd.notna(volume) and vol_mean > 0 else None,
         "liquidity_bucket": context.liquidity.get(bar.trading_date) if market != "FX_GOLD" else None,
@@ -95,7 +98,7 @@ def snapshot(
         "oi_change_pct_24h": None,
         "event_flags": None,
         "utc_time": at.strftime("%H:%M"),
-        "session_phase": _phase(market, bar.ts_utc),
+        "session_phase": _phase(market, bar.ts_utc, at),
         "weekday": at.strftime("%a").upper(),
         "spread_bp": None,
         "spread_atr": None,
