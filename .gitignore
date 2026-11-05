@@ -1,5 +1,5 @@
 # real data, cards and trade files never go in the repo
-data/
+/data/
 cards/out/
 *.parquet
 *.csv
