@@ -1,0 +1,23 @@
+# real data, cards and trade files never go in the repo
+data/
+cards/out/
+*.parquet
+*.csv
+*.jsonl
+*.zip
+*.db
+# secrets
+.env
+*.key
+*.pem
+*credentials*.json
+service-account*.json
+# local review notes and scratch
+REVIEW_LOCAL.md
+# python
+__pycache__/
+*.egg-info/
+.venv/
+.pytest_cache/
+build/
+dist/
