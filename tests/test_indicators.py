@@ -49,13 +49,13 @@ def test_atr_rank_excludes_left_boundary_s3():
     assert result["atr_rank_30d"].iloc[15] == pytest.approx(50)
 
 
-def test_ema_and_rsi_card_features():
+def test_ema_and_rsi_trade555_parity_cards():
     prices = [100] * 8 + [110] + [110] * 191
     result = add_indicators(make_bars(prices))
     assert result["ema9"].iloc[:8].isna().all()
-    assert result["ema9"].iloc[8] == pytest.approx(102)
-    assert result["ema50"].first_valid_index() == 49
-    assert result["ema200"].first_valid_index() == 199
+    assert result["ema9"].iloc[8] == pytest.approx(910 / 9)
+    assert result["ema50"].first_valid_index() == 29
+    assert result["ema200"].first_valid_index() == 29
     assert result["rsi14"].iloc[:14].isna().all()
     assert result["rsi14"].iloc[14] == 100
     assert add_indicators(make_bars([100] * 15))["rsi14"].iloc[-1] == 50

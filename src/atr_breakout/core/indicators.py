@@ -19,6 +19,17 @@ def _wilder_average(values: pd.Series, period: int) -> pd.Series:
     return seeded.ewm(alpha=1 / period, adjust=False).mean().reindex(values.index)
 
 
+def _live_ema(close: pd.Series, period: int) -> pd.Series:
+    # Trade555 engine/bars.py at f4fe9a2. Before a full seed is available,
+    # each snapshot uses the mean of the closes available at that point.
+    result = close.expanding(min_periods=min(period, 30)).mean()
+    if len(close) >= period:
+        seeded = close.iloc[period - 1:].astype(float).copy()
+        seeded.iloc[0] = result.iloc[period - 1]
+        result.iloc[period - 1:] = seeded.ewm(span=period, adjust=False).mean()
+    return result
+
+
 def _atr_rank(timestamps: pd.Series, atr_pct: pd.Series) -> np.ndarray:
     ranks = np.full(len(atr_pct), np.nan)
     if not len(atr_pct):
@@ -46,7 +57,7 @@ def add_indicators(bars: pd.DataFrame) -> pd.DataFrame:
     """Return a copy with ATR, ATR/close, 30-day rank, EMAs and RSI.
 
     Input is a single symbol's bars. RSI is 50 on a flat series. EMAs use
-    the first close as their seed and become visible after their period.
+    Trade555's SMA seed and warmup.
     """
     timestamps = bars["ts_utc"]
     if (
@@ -68,7 +79,7 @@ def add_indicators(bars: pd.DataFrame) -> pd.DataFrame:
     result["atr_rank_30d"] = _atr_rank(timestamps, result["atr_pct"])
 
     for period in EMA_PERIODS:
-        result[f"ema{period}"] = close.ewm(span=period, adjust=False, min_periods=period).mean()
+        result[f"ema{period}"] = _live_ema(close, period)
 
     changes = close.diff().iloc[1:]
     gains = _wilder_average(changes.clip(lower=0), RSI_PERIOD)
