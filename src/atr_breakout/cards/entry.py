@@ -18,8 +18,8 @@ MARKET_CLASS = {"US": "STOCK_US", "NSE": "STOCK_IN", "CRYPTO": "CRYPTO_PERP", "F
 class CardContext:
     """Optional annotated context with explicit UTC bar ends.
 
-    Higher timeframe and benchmark frames carry atr and ema columns from
-    add_indicators. Liquidity buckets are keyed by completed session date.
+    Context frames are ordered by bar end and carry ATR and EMA columns.
+    Liquidity buckets are keyed by completed session date.
     """
 
     higher: dict[str, pd.DataFrame] = field(default_factory=dict)
@@ -46,13 +46,12 @@ def _ema_fields(row, close: float, prefix: str = "") -> dict:
     return fields
 
 
-def _last_completed(frame, cutoff, prior_date=None):
-    if frame is None:
+def _last_completed(frame, cutoff, *, before=False):
+    # Trade555 features.py:80–96 at f4fe9a2 includes bars ending at the cutoff.
+    if frame is None or frame.empty:
         return None
-    eligible = frame.loc[frame["bar_end"].le(cutoff)]
-    if prior_date is not None:
-        eligible = eligible.loc[eligible["trading_date"].lt(prior_date)]
-    return eligible.iloc[-1] if not eligible.empty else None
+    index = frame["bar_end"].searchsorted(cutoff, side="left" if before else "right")
+    return frame.iloc[index - 1] if index else None
 
 
 def _phase(market, opened, at):
@@ -105,10 +104,17 @@ def snapshot(
         "spread_source": None,
     }
     values.update(_ema_fields(bar, close))
-    for prefix in ("h1", "h4", "d"):
-        prior_date = bar.trading_date if prefix == "d" else None
-        completed = _last_completed(context.higher.get(prefix), at, prior_date)
+    for prefix in ("h1", "h4"):
+        completed = _last_completed(context.higher.get(prefix), at)
         values.update(_ema_fields(completed, close, prefix + "_"))
+    # Trade555 features.py:343–351 compares the bar END's local date.
+    # The live FX session uses New York time (host_config.py:28–30).
+    zone = CASH_SESSIONS[market][0] if market in CASH_SESSIONS else (
+        "America/New_York" if market == "FX_GOLD" else "UTC"
+    )
+    local_midnight = at.tz_convert(zone).normalize()
+    daily = _last_completed(context.higher.get("d"), local_midnight, before=True)
+    values.update(_ema_fields(daily, close, "d_"))
 
     benchmark = _last_completed(context.benchmark, at)
     values["mkt_ema50_dist"] = (

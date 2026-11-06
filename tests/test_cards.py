@@ -93,7 +93,7 @@ def test_snapshot_uses_only_closed_context_and_prior_daily_cards(bars):
     bar = bars.iloc[3000]
     at = bar.ts_utc + pd.Timedelta(minutes=15)
     context = pd.DataFrame({
-        "bar_end": [at - pd.Timedelta(hours=1), at, at + pd.Timedelta(minutes=1)],
+        "bar_end": [at - pd.Timedelta(days=1), at, at + pd.Timedelta(minutes=1)],
         "trading_date": [bar.trading_date - pd.Timedelta(days=1), bar.trading_date, bar.trading_date],
         "atr": 2.0, "ema9": [90.0, 95.0, 500.0], "ema50": 80.0, "ema200": 70.0,
     })
@@ -210,3 +210,15 @@ def test_continuous_phase_uses_utc_snapshot_time_cards(bars, market, opened, pha
     frame["ts_utc"] = pd.Timestamp(f"2021-02-01 {opened}Z")
     fields = snapshot(frame, 0, market, CardContext(), cost_bp=12)
     assert fields["session_phase"] == phase
+
+
+@pytest.mark.parametrize(("market", "expected_ema"), [("CRYPTO", 90.0), ("FX_GOLD", 95.0)])
+def test_daily_context_checks_the_bar_end_date_in_live_session_zone_cards(bars, market, expected_ema):
+    frame = bars.iloc[[3000]].copy()
+    frame["ts_utc"] = pd.Timestamp("2021-02-01 12:00Z")
+    context = pd.DataFrame({
+        "bar_end": pd.to_datetime(["2021-01-31 00:00Z", "2021-02-01 00:00Z"], utc=True),
+        "atr": 2.0, "ema9": [90.0, 95.0], "ema50": 80.0, "ema200": 70.0,
+    })
+    fields = snapshot(frame, 0, market, CardContext(higher={"d": context}), cost_bp=12)
+    assert fields["d_ema9_dist"] == pytest.approx((frame.iloc[0].close - expected_ema) / 2)

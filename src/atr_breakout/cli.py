@@ -10,6 +10,8 @@ import subprocess
 import sys
 
 from atr_breakout.cards.anonymise import CardKeys
+from atr_breakout.cards.context import higher_timeframes
+from atr_breakout.cards.entry import CardContext
 from atr_breakout.cards.outcome import build_cards
 from atr_breakout.cards.writer import write_cards
 from atr_breakout.contract_v1 import STUDY_WINDOWS
@@ -87,10 +89,15 @@ def _run(args, command):
     else:
         keys = CardKeys({args.market: min(bars["trading_date"].min() for bars in frames.values())})
         tables = {name: [] for name in ("entry", "exit", "outcome", "event_map")}
-        for _, bars, directions, purity, actual in strategy(
+        sessions = json.loads(args.sessions.read_text()) if args.sessions else None
+        higher = higher_timeframes(minutes, args.market, sessions=sessions)
+        for symbol, bars, directions, purity, actual in strategy(
             frames, args.market, cost_basis_points(args.market, "base"),
         ):
-            cards = build_cards(bars, directions, actual, market=args.market, keys=keys, purity=purity)
+            cards = build_cards(
+                bars, directions, actual, market=args.market, keys=keys, purity=purity,
+                context=CardContext(higher=higher.get(symbol, {})),
+            )
             for name in tables:
                 tables[name].extend(cards[name])
         write_cards(
@@ -108,6 +115,7 @@ def main(argv=None):
         action.add_argument("--out", required=True, type=Path, help="Run directory or private card destination")
         if name == "cards":
             action.add_argument("--schema", required=True, type=Path, help="Pinned Trade555 schema")
+            action.add_argument("--sessions", type=Path, help="Required US/NSE UTC session schedule JSON")
     argv = sys.argv[1:] if argv is None else argv
     args = parser.parse_args(argv)
     try:

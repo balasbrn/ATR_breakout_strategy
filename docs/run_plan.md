@@ -68,8 +68,11 @@ from minute-count metadata. The coverage step must not open reserved prices.
    preserving these local artifacts.
 5. For cards, use `atr-bo cards --schema <pinned-schema.json>` with the same data
    and market arguments and a fresh private output directory. Only DEV and OOS
-   are used. Publish only the export's `public/` directory. The CLI does not yet
-   supply optional higher-timeframe, liquidity, or benchmark context.
+   are used. For US or NSE, add `--sessions <schedule.json>` with an authoritative
+   list of objects containing timezone-aware `open` and `close` timestamps,
+   including early closes and excluding holidays. Higher timeframes use the same
+   authorized minutes. Publish only the export's `public/` directory. Liquidity
+   and benchmark context are separate follow-ups.
 6. Archive the metrics and checksums for the report. Review moved-stop
    open-price diagnostics separately from overnight gaps, and the count of
    crypto exits after more than 20 UTC slots. This CLI produces JSON metrics.
