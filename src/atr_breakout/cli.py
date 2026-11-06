@@ -9,6 +9,7 @@ import shlex
 import subprocess
 import sys
 
+from atr_breakout.archive import archive_destination, archive_directory, archive_holdout_evidence
 from atr_breakout.cards.anonymise import CardKeys
 from atr_breakout.cards.context import higher_timeframes
 from atr_breakout.cards.entry import CardContext
@@ -53,6 +54,9 @@ def _run(args, command):
         _write(args.out, session_schedule(args.market))
         return
     dataset = open_dataset(args.data, args.market)
+    if not dataset.synthetic and not args.archive:
+        raise ValueError("Real runs require --archive")
+    destination = archive_destination(args.archive, args.out) if args.archive else None
     commit = _code_commit(require_clean=not dataset.synthetic)
     provenance = dataset.provenance(commit)
     if args.action == "stage-b":
@@ -60,7 +64,13 @@ def _run(args, command):
     holdout_run = args.out if args.action == "holdout" else None
     if holdout_run and any((holdout_run / name).exists() for name in ("holdout_gross.json", "holdout.json")):
         raise ValueError("Holdout output already exists")
-    minutes, checksums = load_minutes(dataset, commit=commit, holdout_run=holdout_run)
+    def archive_claim(claim: Path) -> None:
+        archive_holdout_evidence(holdout_run, claim, destination)
+
+    minutes, checksums = load_minutes(
+        dataset, commit=commit, holdout_run=holdout_run,
+        archive_claim=archive_claim if holdout_run and destination else None,
+    )
     frames = prepare_bars(minutes, args.market)
     provenance["input_sha256"] = checksums
     execution = {
@@ -111,6 +121,8 @@ def _run(args, command):
         write_cards(
             args.out, tables, schema_path=args.schema, code_commit=commit, synthetic=dataset.synthetic,
         )
+    if destination:
+        archive_directory(args.out, destination)
 
 
 def main(argv=None):
@@ -120,17 +132,23 @@ def main(argv=None):
     sessions.add_argument("--market", required=True, choices=CALENDARS)
     sessions.add_argument("--out", required=True, type=Path, help="New schedule JSON file")
     for name in ("stage-a", "stage-b", "holdout", "cards"):
-        action = actions.add_parser(name)
+        action = actions.add_parser(name, allow_abbrev=False)
         action.add_argument("--data", required=True, type=Path, help="Canonical minute manifest")
         action.add_argument("--market", required=True, choices=STUDY_WINDOWS)
         action.add_argument("--out", required=True, type=Path, help="Run directory or private card destination")
+        action.add_argument("--archive", help="Archive destination prefix (required for real runs)")
         if name == "cards":
             action.add_argument("--schema", required=True, type=Path, help="Pinned Trade555 schema")
             action.add_argument("--sessions", type=Path, help="Required US/NSE UTC session schedule JSON")
     argv = sys.argv[1:] if argv is None else argv
     args = parser.parse_args(argv)
     try:
-        _run(args, shlex.join(["atr-bo", *argv]))
+        archive = getattr(args, "archive", None)
+        recorded = [
+            item.replace(archive, "<runtime-uri>") if archive and item in (archive, f"--archive={archive}") else item
+            for item in argv
+        ]
+        _run(args, shlex.join(["atr-bo", *recorded]))
     except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(2, f"atr-bo: {error}\n")
     return 0

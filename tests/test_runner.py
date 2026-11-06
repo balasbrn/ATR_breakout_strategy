@@ -144,3 +144,164 @@ def test_authorized_holdout_cli_writes_results_once_s8_s10(tmp_path, monkeypatch
     with pytest.raises(SystemExit, match="2"):
         main(args)
     assert (run / "holdout.json").read_bytes() == result
+
+
+@pytest.fixture
+def cloud(monkeypatch):
+    from io import BytesIO
+    from pathlib import Path
+    import subprocess
+    from types import SimpleNamespace
+
+    from atr_breakout import archive
+
+    state = SimpleNamespace(objects={}, calls=[], fail_upload=False, fail_read=False)
+
+    def upload(argv, *, check):
+        assert argv[:4] == ["gcloud", "storage", "cp", "--no-clobber"]
+        assert check
+        local, remote = argv[4:]
+        state.calls.append(("upload", remote))
+        if state.fail_upload:
+            raise subprocess.CalledProcessError(1, argv)
+        state.objects.setdefault(remote, Path(local).read_bytes())
+
+    class Download:
+        def __init__(self, argv, *, stdout):
+            assert argv[:3] == ["gcloud", "storage", "cat"] and stdout == subprocess.PIPE
+            target = argv[3]
+            state.calls.append(("check", target))
+            self.stdout = BytesIO(state.objects[target])
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            self.stdout.close()
+
+        def wait(self):
+            return int(state.fail_read)
+
+    original = subprocess.run
+
+    def run(argv, **kwargs):
+        if argv[0] == "gcloud":
+            return upload(argv, **kwargs)
+        return original(argv, **kwargs)
+
+    monkeypatch.setattr(archive, "subprocess", SimpleNamespace(
+        run=run, Popen=Download, PIPE=subprocess.PIPE, CalledProcessError=subprocess.CalledProcessError,
+    ))
+    return state
+
+
+ARCHIVE = "gs://test-fixture/private"
+
+
+@pytest.mark.parametrize("action", ["stage-a", "stage-b", "holdout", "cards"])
+def test_real_cli_requires_archive_before_price_io_s8(tmp_path, monkeypatch, action):
+    path = tmp_path / "minutes.json"
+    path.write_text(json.dumps({"market": "US", "synthetic": False, "partitions": []}))
+    monkeypatch.setattr("atr_breakout.cli.load_minutes", lambda *a, **kw: pytest.fail("unexpected price I/O"))
+    args = [action, "--market", "US", "--data", str(path), "--out", str(tmp_path / "run")]
+    if action == "cards":
+        args += ["--schema", "unused.json"]
+    with pytest.raises(SystemExit, match="2"):
+        main(args)
+
+
+def test_archives_stage_outputs_under_same_run_id_and_redacts_uri_s6(tmp_path, cloud):
+    manifest = write_study_fixture(tmp_path / "fixture")
+    run = tmp_path / "run"
+    args = ["--data", str(manifest), "--market", "CRYPTO", "--out", str(run), "--archive", ARCHIVE]
+    assert main(["stage-a", *args]) == 0
+    first = dict(cloud.objects)
+    assert f"{ARCHIVE}/run/stage_a.json" in first
+    assert main(["stage-b", *args]) == 0
+    assert f"{ARCHIVE}/run/pass.json" in cloud.objects
+    assert all(cloud.objects[key] == value for key, value in first.items())
+    for file in run.iterdir():
+        assert cloud.objects[f"{ARCHIVE}/run/{file.name}"] == file.read_bytes()
+        assert ARCHIVE.encode() not in file.read_bytes()
+
+
+def test_cards_archive_preserves_nested_paths(tmp_path, cloud, monkeypatch):
+    manifest = write_study_fixture(tmp_path / "fixture")
+
+    def write_fake_cards(directory, *_args, **_kwargs):
+        (directory / "public").mkdir(parents=True)
+        (directory / "public" / "manifest.json").write_text("{}")
+        (directory / "event_map.parquet").write_bytes(b"synthetic private map")
+
+    monkeypatch.setattr("atr_breakout.cli.write_cards", write_fake_cards)
+    assert main([
+        "cards", "--data", str(manifest), "--market", "CRYPTO", "--schema", "unused.json",
+        "--out", str(tmp_path / "card-run"), f"--archive={ARCHIVE}",
+    ]) == 0
+    assert cloud.objects == {
+        f"{ARCHIVE}/card-run/event_map.parquet": b"synthetic private map",
+        f"{ARCHIVE}/card-run/public/manifest.json": b"{}",
+    }
+
+
+def test_holdout_archive_evidence_verified_before_any_partition_read_s8_s10(tmp_path, monkeypatch, cloud):
+    dataset = _dataset(tmp_path, [("2021-01-04", "2021-01-04"), ("2023-01-03", "2023-01-03")])
+    run = tmp_path / "run"
+    _pass(run, dataset)
+    monkeypatch.setattr("atr_breakout.cli._code_commit", lambda **_: COMMIT)
+    read_partition = partitions._read_partition
+
+    def checked_read(*args):
+        for name in (".v1-US-holdout.claim", "stage_a.json", "stage_b.json", "pass.json"):
+            assert ("check", f"{ARCHIVE}/run/{name}") in cloud.calls
+        return read_partition(*args)
+
+    monkeypatch.setattr(partitions, "_read_partition", checked_read)
+    assert main([
+        "holdout", "--market", "US", "--data", str(dataset.manifest),
+        "--out", str(run), "--archive", ARCHIVE,
+    ]) == 0
+    assert f"{ARCHIVE}/run/holdout.json" in cloud.objects
+
+
+@pytest.mark.parametrize("failure", ["upload", "read", "size", "hash", "old_claim"])
+def test_failed_holdout_archive_spends_claim_without_reading_prices_s8_s10(
+    tmp_path, monkeypatch, cloud, failure,
+):
+    dataset = _dataset(tmp_path, [("2023-01-03", "2023-01-03")])
+    run = tmp_path / "run"
+    _pass(run, dataset)
+    monkeypatch.setattr("atr_breakout.cli._code_commit", lambda **_: COMMIT)
+    monkeypatch.setattr(partitions, "_read_partition", lambda *a: pytest.fail("unexpected price I/O"))
+    if failure == "upload":
+        cloud.fail_upload = True
+    elif failure == "read":
+        cloud.fail_read = True
+    elif failure == "size":
+        cloud.objects[f"{ARCHIVE}/run/stage_a.json"] = b"wrong"
+    elif failure == "hash":
+        payload = (run / "stage_a.json").read_bytes()
+        cloud.objects[f"{ARCHIVE}/run/stage_a.json"] = b"x" + payload[1:]
+    else:
+        cloud.objects[f"{ARCHIVE}/run/.v1-US-holdout.claim"] = b"old attempt"
+    with pytest.raises(SystemExit, match="2"):
+        main([
+            "holdout", "--market", "US", "--data", str(dataset.manifest),
+            "--out", str(run), "--archive", ARCHIVE,
+        ])
+    assert (dataset.manifest.parent / ".v1-US-holdout.claim").is_file()
+    assert not (run / "holdout.json").exists()
+
+
+def test_failed_final_archive_exits_with_error(tmp_path, cloud, monkeypatch):
+    dataset = _dataset(tmp_path, [("2021-01-04", "2021-01-04")])
+    run = tmp_path / "run"
+    window = WindowVerdict(0, None, None, None)
+    monkeypatch.setattr("atr_breakout.cli.study_case", lambda *a: (StageVerdict(window, window, None), {}))
+    cloud.fail_upload = True
+    with pytest.raises(SystemExit, match="2"):
+        main([
+            "stage-a", "--market", "US", "--data", str(dataset.manifest),
+            "--out", str(run), "--archive", ARCHIVE,
+        ])
+    assert (run / "stage_a.json").is_file()

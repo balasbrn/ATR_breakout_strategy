@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+from uuid import uuid4
 
 from atr_breakout.contract_v1 import STUDY_WINDOWS
 from atr_breakout.study.passrule import StageVerdict, WindowVerdict
@@ -66,11 +67,12 @@ def require_holdout_pass(run: Path, provenance: dict) -> None:
         raise HoldoutLocked("Holdout requires valid Stage A, Stage B, and pass files") from error
 
 
-def claim_holdout(manifest: Path, market: str, provenance: dict) -> None:
+def claim_holdout(manifest: Path, market: str, provenance: dict) -> Path:
     """Reserve the single v1 holdout attempt for this dataset and market."""
     claim = manifest.parent / f".v1-{market}-holdout.claim"
     try:
         with claim.open("x") as output:
-            json.dump(provenance, output)
+            json.dump({**provenance, "attempt_id": str(uuid4())}, output)
     except FileExistsError as error:
         raise HoldoutLocked("This dataset and market already claimed its v1 holdout") from error
+    return claim
