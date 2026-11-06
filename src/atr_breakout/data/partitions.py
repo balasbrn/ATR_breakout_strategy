@@ -1,5 +1,6 @@
 """Read date-partitioned canonical minute files through the v1 window gate."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 import hashlib
@@ -66,18 +67,23 @@ def _read_partition(path: Path, day: date, zone: str) -> tuple[pd.DataFrame, str
 
 def load_minutes(
     dataset: Dataset, *, commit: str, holdout_run: Path | None = None,
+    archive_claim: Callable[[Path], None] | None = None,
 ) -> tuple[pd.DataFrame, dict[str, str]]:
     """Read only selected dates. Supplying a holdout run always invokes the gate."""
     if dataset.market == "CRYPTO" and not dataset.synthetic:
         raise ValueError("Real crypto requires the approved completeness and gap-fill adapter")
     holdout = holdout_run is not None
     if holdout:
+        if not dataset.synthetic and archive_claim is None:
+            raise ValueError("Real holdout requires an archive for its claim and stage evidence")
         provenance = dataset.provenance(commit)
         require_holdout_pass(holdout_run, provenance)
         reserved_start, reserved_end = allowed_dates(dataset.market, holdout=True)
         if not any(reserved_start <= day <= reserved_end for day in dataset.partitions):
             raise ValueError("No holdout partitions in the manifest")
-        claim_holdout(dataset.manifest, dataset.market, provenance)
+        claim = claim_holdout(dataset.manifest, dataset.market, provenance)
+        if archive_claim is not None:
+            archive_claim(claim)
     start, end = allowed_dates(dataset.market, holdout=False)
     if holdout:
         _, end = allowed_dates(dataset.market, holdout=True)

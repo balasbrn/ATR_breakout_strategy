@@ -46,6 +46,19 @@ from minute-count metadata. The coverage step must not open reserved prices.
 
 ## Sequence after owner review
 
+Pass `--archive <gs://bucket/prefix>` to `stage-a`, `stage-b`, `holdout`, and
+`cards`. It is required for real runs and optional for synthetic runs. Supply
+the destination at runtime and use a private bucket because the card archive
+includes the private event map. The output directory basename is the run ID.
+Use the same archive prefix and run ID for both study stages and holdout, and
+a separate run ID for cards. The recorded command redacts the destination.
+
+After each command, the CLI copies the output tree to `<prefix>/<run-id>/` with
+`gcloud storage cp --no-clobber`. It streams each stored object back to check its
+byte count and SHA-256. Existing objects must match exactly. An upload or
+verification failure exits with an error. Wait for successful verification
+before advancing to the next step.
+
 1. Run `stage-a` once per market with a new output directory. Save the gross verdict
    and metrics before any net computations. Record the command, code revision,
    manifest digest, and input checksums.
@@ -60,12 +73,13 @@ from minute-count metadata. The coverage step must not open reserved prices.
    DEV and OOS bars then provide indicator warmup. Only holdout signals enter
    the holdout simulation. Crypto 2025+ is outside every permitted range.
 4. The canonical dataset directory must be writable for the exclusive holdout
-   claim. Keep it in place. A claim consumes the attempt before any reserved
-   prices are opened, including if execution later fails. The claim also
-   prevents using another study output directory for a repeat. Use one canonical
-   dataset directory per registered market and keep stage evidence there or in
-   the run archive. The checks protect the ordinary CLI workflow and rely on
-   preserving these local artifacts.
+   claim. Before opening any price partition, the runner archives and verifies
+   the claim plus `stage_a.json`, `stage_b.json`, and `pass.json`. An upload or
+   verification failure stops the run and leaves the attempt spent. Preserve
+   the claim in the canonical dataset directory. If the VM is replaced,
+   restore the archived run files and claim to their original locations.
+   Keep the same archive prefix and run ID so any existing remote claim
+   blocks a new attempt even if the local claim was lost.
 5. For cards, use `atr-bo cards --schema <pinned-schema.json>` with the same data
    and market arguments and a fresh private output directory. Only DEV and OOS
    are used. For US or NSE, generate the DEV/OOS schedule with
