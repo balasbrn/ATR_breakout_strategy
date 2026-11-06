@@ -108,7 +108,12 @@ transitions at 08:00 and 16:00.
 
 ## 7. Higher-timeframe context
 
-US and NSE use the supplied session schedule. H1 and H4 start at the session
+Generate the US and NSE session schedule with `atr-bo sessions`. It follows the
+Trade555 audit using XNYS for US and XBOM for NSE. NSE special sessions such as
+Muhurat trading and budget Saturdays are absent from XBOM, so they receive no
+H1, H4, or daily context. [Trade555 calendar audit](https://github.com/balasbrn/Trade555/blob/f4fe9a253dedadb297ea8be6522eba6d1bd6a62c/src/trade555/data_audit/checks.py#L19-L34)
+
+Cash H1 and H4 start at the session
 open and omit incomplete groups and session-end stubs. The daily bar ends at the
 actual session close. [Trade555 session aggregation and minute coverage](https://github.com/balasbrn/Trade555/blob/f4fe9a253dedadb297ea8be6522eba6d1bd6a62c/src/trade555/event_cards/preparation.py#L94-L147)
 
@@ -118,6 +123,6 @@ uses the authorized archive and leaves gaps where a live crypto provider
 fallback would have supplied data. [Trade555 UTC aggregation](https://github.com/balasbrn/Trade555/blob/f4fe9a253dedadb297ea8be6522eba6d1bd6a62c/src/trade555/event_cards/sources.py#L414-L452), [Trade555 crypto archive coverage](https://github.com/balasbrn/Trade555/blob/f4fe9a253dedadb297ea8be6522eba6d1bd6a62c/src/trade555/event_cards/sources.py#L685-L709)
 
 H1 and H4 include a bar ending exactly at the snapshot time. Daily also requires
-its end date to be strictly earlier in the live session timezone. FX buckets
-are UTC, and their daily eligibility uses New York time. Distances divide by
+its end date to be strictly earlier in the live session timezone. FX daily
+bars are cut at UTC midnight, while the prior-day rule uses New York midnight. Distances divide by
 the selected timeframe's Wilder ATR. [Trade555 closed-bar cutoff](https://github.com/balasbrn/Trade555/blob/f4fe9a253dedadb297ea8be6522eba6d1bd6a62c/src/trade555/event_cards/features.py#L80-L96), [Trade555 daily selection](https://github.com/balasbrn/Trade555/blob/f4fe9a253dedadb297ea8be6522eba6d1bd6a62c/src/trade555/event_cards/features.py#L343-L351), [Trade555 session timezones](https://github.com/balasbrn/Trade555/blob/f4fe9a253dedadb297ea8be6522eba6d1bd6a62c/src/trade555/event_cards/host_config.py#L28-L30)
