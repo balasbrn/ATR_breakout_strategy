@@ -41,6 +41,7 @@ study/                across symbols, per market
   stats.py            mean R, t with SE clustered by date, without-best-symbol (§10)
   passrule.py         Stage A, Stage B, the pass file that unlocks the holdout (§10)
 cards/                event cards for the ML project (docs/event_cards.md)
+  context.py          completed higher-timeframe bars from authorized minutes
   entry.py            entry snapshot fields
   outcome.py          CARD_PLAN and BOT_ACTUAL outcomes
   anonymise.py        instrument_key, day_key, cluster_id; private event map
@@ -76,7 +77,7 @@ python -m synthetic.generate --out <dir>
 atr-bo stage-a --data <manifest> --market US --out <run-dir>
 atr-bo stage-b --data <manifest> --market US --out <run-dir>
 atr-bo holdout --data <manifest> --market US --out <run-dir>
-atr-bo cards --data <manifest> --market US --out <private-dir> --schema <schema>
+atr-bo cards --data <manifest> --market US --out <private-dir> --schema <schema> --sessions <schedule>
 ```
 
 ## 5. Documents
