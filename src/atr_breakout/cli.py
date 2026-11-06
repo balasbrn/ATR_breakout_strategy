@@ -16,6 +16,7 @@ from atr_breakout.cards.outcome import build_cards
 from atr_breakout.cards.writer import write_cards
 from atr_breakout.contract_v1 import STUDY_WINDOWS
 from atr_breakout.data.partitions import load_minutes, open_dataset
+from atr_breakout.data.sessions import CALENDARS, session_schedule
 from atr_breakout.runner import holdout_case, prepare_bars, strategy, study_case
 from atr_breakout.study.passrule import holdout_passed, read_stage_a, write_stage_a, write_stage_b
 from atr_breakout.core.costs import cost_basis_points
@@ -48,6 +49,9 @@ def _write(path, record):
 
 
 def _run(args, command):
+    if args.action == "sessions":
+        _write(args.out, session_schedule(args.market))
+        return
     dataset = open_dataset(args.data, args.market)
     commit = _code_commit(require_clean=not dataset.synthetic)
     provenance = dataset.provenance(commit)
@@ -90,6 +94,10 @@ def _run(args, command):
         keys = CardKeys({args.market: min(bars["trading_date"].min() for bars in frames.values())})
         tables = {name: [] for name in ("entry", "exit", "outcome", "event_map")}
         sessions = json.loads(args.sessions.read_text()) if args.sessions else None
+        if isinstance(sessions, dict):
+            if sessions["market"] != args.market:
+                raise ValueError("Session schedule market does not match the cards market")
+            sessions = sessions["sessions"]
         higher = higher_timeframes(minutes, args.market, sessions=sessions)
         for symbol, bars, directions, purity, actual in strategy(
             frames, args.market, cost_basis_points(args.market, "base"),
@@ -108,6 +116,9 @@ def _run(args, command):
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="atr-bo")
     actions = parser.add_subparsers(dest="action", required=True)
+    sessions = actions.add_parser("sessions", help="Generate the DEV/OOS cash-session schedule")
+    sessions.add_argument("--market", required=True, choices=CALENDARS)
+    sessions.add_argument("--out", required=True, type=Path, help="New schedule JSON file")
     for name in ("stage-a", "stage-b", "holdout", "cards"):
         action = actions.add_parser(name)
         action.add_argument("--data", required=True, type=Path, help="Canonical minute manifest")

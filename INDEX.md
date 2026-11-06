@@ -30,6 +30,7 @@ data/                 one adapter per vendor -> one standard 1-minute frame
   ctrader_fx.py       FX and XAUUSD; tick volume dropped (§2, §3)
   windows.py          dev / OOS / holdout dates per market, and the holdout lock (§8)
   partitions.py       manifest-backed canonical minute reader
+  sessions.py         generate DEV/OOS cash session schedules
 core/                 pure functions on one symbol's bars
   bars.py             1-minute -> 15-minute bars, sessions, overnight marks (§3)
   indicators.py       Wilder ATR(14), ATR % of price, ATR_Rank_30d, EMA, RSI (§3)
@@ -77,6 +78,7 @@ python -m synthetic.generate --out <dir>
 atr-bo stage-a --data <manifest> --market US --out <run-dir>
 atr-bo stage-b --data <manifest> --market US --out <run-dir>
 atr-bo holdout --data <manifest> --market US --out <run-dir>
+atr-bo sessions --market US --out <schedule>
 atr-bo cards --data <manifest> --market US --out <private-dir> --schema <schema> --sessions <schedule>
 ```
 
