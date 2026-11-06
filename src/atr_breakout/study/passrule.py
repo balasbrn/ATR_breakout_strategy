@@ -73,19 +73,40 @@ def _write_json(path: Path, record: dict) -> str:
     return hashlib.sha256(contents).hexdigest()
 
 
-def write_stage_run(
-    directory: Path, market: str, evaluate: Callable[[CostCase], StageVerdict],
-) -> bool:
-    """Run one market in a new directory and write holdout eligibility last."""
-    if market not in STUDY_WINDOWS:
-        raise ValueError(f"Unknown market: {market}")
-    directory.mkdir()
-    provenance = {"contract": "v1", "market": market}
-
-    gross = evaluate("gross")
-    gross_hash = _write_json(directory / "stage_a.json", {
+def write_stage_a(directory: Path, provenance: dict, gross: StageVerdict) -> None:
+    """Record the gross verdict before base or stress is evaluated."""
+    if provenance["market"] not in STUDY_WINDOWS:
+        raise ValueError("Unknown market")
+    directory.mkdir(mode=0o700)
+    _write_json(directory / "stage_a.json", {
         **provenance, "gross": asdict(gross), "passed": gross.passed,
     })
+
+
+def read_stage_a(directory: Path, provenance: dict) -> tuple[bool, str]:
+    payload = (directory / "stage_a.json").read_bytes()
+    record = json.loads(payload)
+    if any(record.get(key) != value for key, value in provenance.items()):
+        raise ValueError("Stage A provenance differs from Stage B inputs")
+    gross = record["gross"]
+    verdict = StageVerdict(
+        WindowVerdict(**gross["dev"]), WindowVerdict(**gross["oos"]), gross["clustered_t"],
+    )
+    if record["passed"] is not verdict.passed:
+        raise ValueError("Stage A verdict is inconsistent")
+    return verdict.passed, hashlib.sha256(payload).hexdigest()
+
+
+def write_stage_b(
+    directory: Path, provenance: dict, evaluate: Callable[[CostCase], StageVerdict],
+) -> bool:
+    """Check recorded gross evidence before invoking either net evaluation."""
+    gross_passed, gross_hash = read_stage_a(directory, provenance)
+    if (directory / "stage_b.json").exists() or (directory / "pass.json").exists():
+        raise FileExistsError("Stage B output already exists")
+    # Claim before net evaluation to exclude concurrent calls.
+    with (directory / ".stage_b.claim").open("x"):
+        pass
     base = evaluate("base")
     stress = evaluate("stress")
     net_hash = _write_json(directory / "stage_b.json", {
@@ -93,12 +114,21 @@ def write_stage_run(
     })
     _write_json(directory / "pass.json", {
         **provenance,
-        "stage_a_passed": gross.passed,
-        "stage_b_passed": base.passed,
-        "stage_a_sha256": gross_hash,
-        "stage_b_sha256": net_hash,
+        "stage_a_passed": gross_passed, "stage_b_passed": base.passed,
+        "stage_a_sha256": gross_hash, "stage_b_sha256": net_hash,
     })
-    return gross.passed and base.passed
+    return gross_passed and base.passed
+
+
+def write_stage_run(
+    directory: Path, market: str, evaluate: Callable[[CostCase], StageVerdict],
+) -> bool:
+    """Run one market in a new directory and write holdout eligibility last."""
+    if directory.exists():
+        raise FileExistsError(directory)
+    provenance = {"contract": "v1", "market": market}
+    write_stage_a(directory, provenance, evaluate("gross"))
+    return write_stage_b(directory, provenance, evaluate)
 
 
 def holdout_passed(gross_mean: float | None, base_mean: float | None) -> bool:

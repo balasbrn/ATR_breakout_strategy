@@ -29,6 +29,7 @@ data/                 one adapter per vendor -> one standard 1-minute frame
   kraken.py           crypto spot, plus the completeness and gap-fill rules (§12 O5)
   ctrader_fx.py       FX and XAUUSD; tick volume dropped (§2, §3)
   windows.py          dev / OOS / holdout dates per market, and the holdout lock (§8)
+  partitions.py       manifest-backed canonical minute reader
 core/                 pure functions on one symbol's bars
   bars.py             1-minute -> 15-minute bars, sessions, overnight marks (§3)
   indicators.py       Wilder ATR(14), ATR % of price, ATR_Rank_30d, EMA, RSI (§3)
@@ -46,6 +47,7 @@ cards/                event cards for the ML project (docs/event_cards.md)
   writer.py           parquet by day_key + manifest + sha256 sidecar
 report/
   fill_report.py      fills v1/report.md "pending" cells from a run summary
+runner.py             connect permitted bars, simulations, and study metrics
 cli.py                one command per step (see §4)
 ```
 
@@ -64,14 +66,17 @@ Data flow: `data` -> `core` -> `study` and `cards` -> `report`. `core` never imp
 8. Data adapters, one per vendor, each tested on a tiny synthetic file in that vendor's format.
 9. `cli.py`, `report/fill_report.py`, and a full synthetic end-to-end run.
 
-## 4. Commands (planned)
+## 4. Commands
+
+See the [v1 run plan](docs/run_plan.md) for the review sequence, input manifest,
+and a synthetic dry run.
 
 ```
-atr-bo synthetic --out <dir>                       # fake 1-minute data
-atr-bo stage-a  --data <dir> --market US --out <dir>
-atr-bo stage-b  --data <dir> --market US --out <dir>   # refuses if Stage A file is missing
-atr-bo cards    --data <dir> --market US --out <private dir>
-atr-bo report   --runs <dir>                       # fills v1/report.md
+python -m synthetic.generate --out <dir>
+atr-bo stage-a --data <manifest> --market US --out <run-dir>
+atr-bo stage-b --data <manifest> --market US --out <run-dir>
+atr-bo holdout --data <manifest> --market US --out <run-dir>
+atr-bo cards --data <manifest> --market US --out <private-dir> --schema <schema>
 ```
 
 ## 5. Documents
