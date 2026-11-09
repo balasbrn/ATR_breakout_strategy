@@ -67,9 +67,11 @@ def require_holdout_pass(run: Path, provenance: dict) -> None:
         raise HoldoutLocked("Holdout requires valid Stage A, Stage B, and pass files") from error
 
 
-def claim_holdout(manifest: Path, market: str, provenance: dict) -> Path:
+def claim_holdout(
+    manifest: Path, market: str, provenance: dict, *, purpose: str = "holdout",
+) -> Path:
     """Reserve the single v1 holdout attempt for this dataset and market."""
-    claim = manifest.parent / f".v1-{market}-holdout.claim"
+    claim = manifest.parent / f".v1-{market}-{purpose}.claim"
     try:
         with claim.open("x") as output:
             json.dump({

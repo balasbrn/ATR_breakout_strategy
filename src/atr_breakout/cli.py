@@ -9,6 +9,8 @@ import shlex
 import subprocess
 import sys
 
+import pyarrow.fs as arrow_fs
+
 from atr_breakout.archive import archive_destination, archive_directory, archive_holdout_evidence
 from atr_breakout.cards.anonymise import CardKeys
 from atr_breakout.cards.entry import CardContext
@@ -17,6 +19,8 @@ from atr_breakout.cards.writer import write_cards
 from atr_breakout.contract_v1 import STUDY_WINDOWS
 from atr_breakout.data.partitions import iter_minute_partitions, open_dataset
 from atr_breakout.data.sessions import CALENDARS, session_schedule
+from atr_breakout.data.validated import convert_validated
+from atr_breakout.data.windows import claim_holdout, require_holdout_pass
 from atr_breakout.runner import holdout_case, prepare_partitioned_bars, strategy, study_case
 from atr_breakout.study.passrule import holdout_passed, read_stage_a, write_stage_a, write_stage_b
 from atr_breakout.core.costs import cost_basis_points
@@ -48,9 +52,46 @@ def _write(path, record):
         output.write(payload)
 
 
+def _convert(args):
+    if not args.source.startswith("gs://"):
+        raise ValueError("Conversion requires a runtime GCS source prefix")
+    if args.out.resolve().is_relative_to(Path(__file__).resolve().parents[2]):
+        raise ValueError("Write canonical market data outside the source checkout")
+
+    study = authorize = None
+    if args.phase == "holdout":
+        if not all((args.study_data, args.run, args.archive)):
+            raise ValueError("Holdout conversion requires --study-data, --run, and --archive")
+        study = open_dataset(args.study_data, args.market)
+        commit = _code_commit(require_clean=True)
+        provenance = study.provenance(commit)
+        require_holdout_pass(args.run, provenance)
+        destination = archive_destination(args.archive, args.run)
+        purpose = "holdout-conversion"
+
+        def authorize():
+            require_holdout_pass(args.run, provenance)
+            claim = claim_holdout(study.manifest, study.market, provenance, purpose=purpose)
+            archive_holdout_evidence(
+                args.run, claim, destination, market=study.market, manifest_sha256=study.sha256,
+                purpose=purpose,
+            )
+    elif args.study_data or args.run or args.archive:
+        raise ValueError("--study-data, --run, and --archive apply only to holdout conversion")
+
+    filesystem, root = arrow_fs.FileSystem.from_uri(args.source)
+    manifest = convert_validated(
+        filesystem, root, args.out, market=args.market, study=study, authorize_holdout=authorize,
+    )
+    print(manifest)
+
+
 def _run(args, command):
     if args.action == "sessions":
         _write(args.out, session_schedule(args.market))
+        return
+    if args.action == "convert":
+        _convert(args)
         return
     dataset = open_dataset(args.data, args.market)
     if not dataset.synthetic and not args.archive:
@@ -78,6 +119,8 @@ def _run(args, command):
     partitions = iter_minute_partitions(
         dataset, commit=commit, holdout_run=holdout_run,
         archive_claim=archive_claim if holdout_run and destination else None,
+        holdout_data=open_dataset(args.holdout_data, args.market)
+        if holdout_run and getattr(args, "holdout_data", None) else None,
     )
     frames, higher, checksums = prepare_partitioned_bars(
         partitions, args.market, cards=args.action == "cards", sessions=sessions,
@@ -135,12 +178,22 @@ def main(argv=None):
     sessions = actions.add_parser("sessions", help="Generate the DEV/OOS cash-session schedule")
     sessions.add_argument("--market", required=True, choices=CALENDARS)
     sessions.add_argument("--out", required=True, type=Path, help="New schedule JSON file")
+    convert = actions.add_parser("convert", help="Convert Trade555 validated symbol files")
+    convert.add_argument("--source", required=True, help="Runtime gs:// validated-layer prefix")
+    convert.add_argument("--market", required=True, choices=STUDY_WINDOWS)
+    convert.add_argument("--phase", required=True, choices=("study", "holdout"))
+    convert.add_argument("--out", required=True, type=Path, help="Fresh canonical output directory")
+    convert.add_argument("--study-data", type=Path, help="Study manifest for holdout conversion")
+    convert.add_argument("--run", type=Path, help="Study stage evidence directory for holdout conversion")
+    convert.add_argument("--archive", help="Private archive prefix for the holdout conversion claim")
     for name in ("stage-a", "stage-b", "holdout", "cards"):
         action = actions.add_parser(name, allow_abbrev=False)
         action.add_argument("--data", required=True, type=Path, help="Canonical minute manifest")
         action.add_argument("--market", required=True, choices=STUDY_WINDOWS)
         action.add_argument("--out", required=True, type=Path, help="Run directory or private card destination")
         action.add_argument("--archive", help="Archive destination prefix (required for real runs)")
+        if name == "holdout":
+            action.add_argument("--holdout-data", type=Path, help="Separately converted holdout manifest")
         if name == "cards":
             action.add_argument("--schema", required=True, type=Path, help="Pinned Trade555 schema")
             action.add_argument("--sessions", type=Path, help="Required US/NSE UTC session schedule JSON")

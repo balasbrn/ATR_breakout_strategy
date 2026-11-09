@@ -13,6 +13,8 @@ import pyarrow.parquet as pq
 from atr_breakout.data.schema import MINUTE_COLUMNS, validate_minutes
 from atr_breakout.data.windows import allowed_dates, claim_holdout, require_holdout_pass
 
+VALIDATED_LAYOUT = "trade555_validated_v1.1"
+
 MARKET_ZONES = {"US": "America/New_York", "NSE": "Asia/Kolkata", "CRYPTO": "UTC", "FX_GOLD": "UTC"}
 
 
@@ -23,6 +25,7 @@ class Dataset:
     synthetic: bool
     sha256: str
     partitions: dict[date, tuple[str, str]]
+    conversion: dict | None = None
 
     def provenance(self, commit: str) -> dict:
         return {
@@ -44,7 +47,14 @@ def open_dataset(manifest: Path, market: str) -> Dataset:
         if day in partitions:
             raise ValueError("Only one minute partition per market trading date is allowed")
         partitions[day] = (item["path"], item["sha256"])
-    return Dataset(manifest, market, record["synthetic"], hashlib.sha256(payload).hexdigest(), partitions)
+    conversion = record.get("conversion")
+    if conversion is not None and (
+        conversion.get("layout") != VALIDATED_LAYOUT or conversion.get("phase") not in ("study", "holdout")
+    ):
+        raise ValueError("Unrecognized validated conversion manifest")
+    return Dataset(
+        manifest, market, record["synthetic"], hashlib.sha256(payload).hexdigest(), partitions, conversion,
+    )
 
 
 def _read_partition(path: Path, day: date, zone: str) -> tuple[pd.DataFrame, str]:
@@ -68,39 +78,58 @@ def _read_partition(path: Path, day: date, zone: str) -> tuple[pd.DataFrame, str
 def iter_minute_partitions(
     dataset: Dataset, *, commit: str, holdout_run: Path | None = None,
     archive_claim: Callable[[Path], None] | None = None,
+    holdout_data: Dataset | None = None,
 ) -> Iterator[tuple[date, pd.DataFrame, str]]:
     """Yield validated daily partitions in order after any required holdout gate."""
-    if dataset.market == "CRYPTO" and not dataset.synthetic:
+    if dataset.conversion and dataset.conversion["phase"] != "study":
+        raise ValueError("Use a study manifest as the primary dataset")
+    if dataset.market == "CRYPTO" and not dataset.synthetic and not dataset.conversion:
         raise ValueError("Real crypto requires the approved completeness and gap-fill adapter")
     holdout = holdout_run is not None
+    if holdout_data is not None and not holdout:
+        raise ValueError("Converted holdout data requires the holdout command")
     if holdout:
+        if dataset.conversion and holdout_data is None:
+            raise ValueError("A validated-layer holdout requires its separately converted manifest")
+        if holdout_data is not None:
+            conversion = holdout_data.conversion or {}
+            if (
+                not dataset.conversion or conversion.get("phase") != "holdout"
+                or conversion.get("study_manifest_sha256") != dataset.sha256
+                or conversion.get("sources") != dataset.conversion["sources"]
+                or holdout_data.market != dataset.market or holdout_data.synthetic != dataset.synthetic
+            ):
+                raise ValueError("Converted holdout manifest does not match the study dataset")
         if not dataset.synthetic and archive_claim is None:
             raise ValueError("Real holdout requires an archive for its claim and stage evidence")
         provenance = dataset.provenance(commit)
         require_holdout_pass(holdout_run, provenance)
         reserved_start, reserved_end = allowed_dates(dataset.market, holdout=True)
-        if not any(reserved_start <= day <= reserved_end for day in dataset.partitions):
+        reserved = holdout_data or dataset
+        if not any(reserved_start <= day <= reserved_end for day in reserved.partitions):
             raise ValueError("No holdout partitions in the manifest")
         claim = claim_holdout(dataset.manifest, dataset.market, provenance)
         if archive_claim is not None:
             archive_claim(claim)
-    start, end = allowed_dates(dataset.market, holdout=False)
+    start, study_end = allowed_dates(dataset.market, holdout=False)
+    windows = [(dataset, start, study_end)]
     if holdout:
-        _, end = allowed_dates(dataset.market, holdout=True)
+        windows.append((holdout_data or dataset, reserved_start, reserved_end))
     found = False
-    root = dataset.manifest.parent
-    for day, (relative, expected) in sorted(dataset.partitions.items()):
-        if (start is not None and day < start) or day > end:
-            continue
-        path = (root / relative).resolve(strict=True)
-        if not path.is_relative_to(root):
-            raise ValueError("A selected partition is outside its dataset directory")
-        frame, checksum = _read_partition(path, day, MARKET_ZONES[dataset.market])
-        if checksum != expected:
-            raise ValueError(f"Partition checksum differs from manifest: {day}")
-        found = True
-        yield day, frame, checksum
-        del frame
+    for source, lower, upper in windows:
+        root = source.manifest.parent
+        for day, (relative, expected) in sorted(source.partitions.items()):
+            if (lower is not None and day < lower) or day > upper:
+                continue
+            path = (root / relative).resolve(strict=True)
+            if not path.is_relative_to(root):
+                raise ValueError("A selected partition is outside its dataset directory")
+            frame, checksum = _read_partition(path, day, MARKET_ZONES[dataset.market])
+            if checksum != expected:
+                raise ValueError(f"Partition checksum differs from manifest: {day}")
+            found = True
+            yield day, frame, checksum
+            del frame
     if not found:
         raise ValueError("No minute partitions in the authorized window")
 
