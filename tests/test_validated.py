@@ -194,3 +194,33 @@ def test_crypto_completeness_is_per_required_year_s12(monkeypatch):
     assert result["passed"]
     assert result["years"]["2022"]["observed"] == 0
     assert not result["years"]["2022"]["required"]
+
+
+@pytest.mark.parametrize(("market", "dataset", "symbol_count"), [
+    ("US", "us_stocks", 1), ("NSE", "nse", 1),
+    ("FX_GOLD", "fx_gold", 8), ("CRYPTO", "crypto", 1),
+])
+def test_inventory_discovers_symbols_from_audits_without_folder_markers(tmp_path, market, dataset, symbol_count):
+    from atr_breakout.data.validated import _inventory
+
+    root = tmp_path / "validated"
+    for index in range(symbol_count):
+        _source(root, dataset=dataset, symbol=f"FAKE{index}")
+    directory = root / dataset
+    (directory / "audit.json").write_text("not a symbol audit")
+    local = fs.LocalFileSystem()
+
+    def get_file_info(path):
+        if isinstance(path, fs.FileSelector):
+            assert path.base_dir == str(directory)
+            assert path.recursive
+            return [info for info in local.get_file_info(path) if info.type == fs.FileType.File]
+        return local.get_file_info(path)
+
+    filesystem = SimpleNamespace(get_file_info=get_file_info, open_input_file=local.open_input_file)
+    symbols, excluded = _inventory(filesystem, str(root), market)
+    assert list(symbols) == [f"FAKE{index}" for index in range(symbol_count)]
+    assert not excluded
+    for symbol, record in symbols.items():
+        assert record["path"] == str(directory / f"symbol={symbol}" / "bars.parquet")
+        assert record["usable_from"] == "2022-12-30"

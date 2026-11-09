@@ -28,25 +28,29 @@ def _midnight(day, zone="UTC"):
 
 
 def _inventory(filesystem, root, market):
-    directory = f"{root.rstrip('/')}/{DATASETS[market]}"
+    directory = PurePosixPath(root) / DATASETS[market]
     symbols, excluded = {}, {}
-    for entry in filesystem.get_file_info(fs.FileSelector(directory)):
-        name = PurePosixPath(entry.path).name
-        if entry.type != fs.FileType.Directory or not name.startswith("symbol="):
+    for entry in filesystem.get_file_info(fs.FileSelector(str(directory), recursive=True)):
+        path = PurePosixPath(entry.path)
+        parent = path.parent
+        if (
+            entry.type != fs.FileType.File or path.name != "audit.json"
+            or parent.parent != directory or not parent.name.startswith("symbol=")
+        ):
             continue
-        symbol = name.removeprefix("symbol=")
+        symbol = parent.name.removeprefix("symbol=")
         if market == "US" and symbol == "GOOG":
             excluded[symbol] = "contract §2: one company, GOOGL kept"
             continue
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", symbol):
             raise ValueError("Invalid symbol partition name")
-        with filesystem.open_input_file(f"{entry.path}/audit.json") as source:
+        with filesystem.open_input_file(entry.path) as source:
             audit = source.read()
         record = json.loads(audit)
         if record["symbol"] != symbol:
             raise ValueError("Audit symbol differs from the partition name")
         usable = record["completeness"]["usable_from"]
-        price = filesystem.get_file_info(f"{entry.path}/bars.parquet")
+        price = filesystem.get_file_info(str(parent / "bars.parquet"))
         if price.type != fs.FileType.File:
             raise ValueError(f"Missing validated price file for {symbol}")
         symbols[symbol] = {
