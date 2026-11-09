@@ -5,9 +5,11 @@ from pathlib import Path
 import re
 import subprocess
 
+from atr_breakout.data.windows import HoldoutLocked
+
 
 def _safe_path(value: str) -> bool:
-    return all(re.fullmatch(r"[A-Za-z0-9_.-]+", part) and part not in (".", "..")
+    return all(re.fullmatch(r"[A-Za-z0-9_.=-]+", part) and part not in (".", "..")
                for part in value.split("/"))
 
 
@@ -57,8 +59,28 @@ def archive_directory(directory: Path, destination: str) -> None:
         archive_file(path, destination, path.relative_to(directory).as_posix())
 
 
-def archive_holdout_evidence(run: Path, claim: Path, destination: str) -> None:
-    # Write the unique claim first so an existing remote claim blocks any retry.
+def _require_claim_absent(target: str) -> None:
+    try:
+        result = subprocess.run(["gcloud", "storage", "ls", target], capture_output=True, text=True)
+    except OSError as error:
+        raise HoldoutLocked("Could not check the remote holdout claim") from error
+    if result.returncode == 0:
+        raise HoldoutLocked("A remote holdout claim already exists for this dataset or run")
+    # A permission or transport error does not establish that the object is absent.
+    if not result.stderr.strip().endswith("One or more URLs matched no objects."):
+        raise HoldoutLocked("Could not confirm that the remote holdout claim is absent")
+
+
+def archive_holdout_evidence(
+    run: Path, claim: Path, destination: str, *, market: str, manifest_sha256: str,
+) -> None:
+    archive_prefix = destination.rsplit("/", 1)[0]
+    claims = f"{archive_prefix}/holdout-claims"
+    fixed_name = f"v1-{market}-{manifest_sha256}.claim"
+    _require_claim_absent(f"{claims}/{fixed_name}")
+    _require_claim_absent(f"{destination}/{claim.name}")
+    # The unique claim also detects a competing upload after the existence check.
+    archive_file(claim, claims, fixed_name)
     archive_file(claim, destination, claim.name)
     for name in ("stage_a.json", "stage_b.json", "pass.json"):
         archive_file(run / name, destination, name)

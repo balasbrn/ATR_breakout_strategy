@@ -155,7 +155,7 @@ def cloud(monkeypatch):
 
     from atr_breakout import archive
 
-    state = SimpleNamespace(objects={}, calls=[], fail_upload=False, fail_read=False)
+    state = SimpleNamespace(objects={}, calls=[], fail_upload=False, fail_read=False, fail_list=False)
 
     def upload(argv, *, check):
         assert argv[:4] == ["gcloud", "storage", "cp", "--no-clobber"]
@@ -185,6 +185,15 @@ def cloud(monkeypatch):
     original = subprocess.run
 
     def run(argv, **kwargs):
+        if argv[:3] == ["gcloud", "storage", "ls"]:
+            assert kwargs == {"capture_output": True, "text": True}
+            target = argv[3]
+            state.calls.append(("list", target))
+            if state.fail_list:
+                return SimpleNamespace(returncode=1, stderr="Permission denied")
+            if target in state.objects:
+                return SimpleNamespace(returncode=0, stderr="")
+            return SimpleNamespace(returncode=1, stderr="ERROR: One or more URLs matched no objects.")
         if argv[0] == "gcloud":
             return upload(argv, **kwargs)
         return original(argv, **kwargs)
@@ -229,7 +238,9 @@ def test_cards_archive_preserves_nested_paths(tmp_path, cloud, monkeypatch):
     manifest = write_study_fixture(tmp_path / "fixture")
 
     def write_fake_cards(directory, *_args, **_kwargs):
-        (directory / "public").mkdir(parents=True)
+        partition = directory / "public" / "entry" / "day_key=1" / "part-00000.parquet"
+        partition.parent.mkdir(parents=True)
+        partition.write_bytes(b"synthetic card partition")
         (directory / "public" / "manifest.json").write_text("{}")
         (directory / "event_map.parquet").write_bytes(b"synthetic private map")
 
@@ -241,6 +252,7 @@ def test_cards_archive_preserves_nested_paths(tmp_path, cloud, monkeypatch):
     assert cloud.objects == {
         f"{ARCHIVE}/card-run/event_map.parquet": b"synthetic private map",
         f"{ARCHIVE}/card-run/public/manifest.json": b"{}",
+        f"{ARCHIVE}/card-run/public/entry/day_key=1/part-00000.parquet": b"synthetic card partition",
     }
 
 
@@ -252,6 +264,9 @@ def test_holdout_archive_evidence_verified_before_any_partition_read_s8_s10(tmp_
     read_partition = partitions._read_partition
 
     def checked_read(*args):
+        fixed = f"{ARCHIVE}/holdout-claims/v1-US-{dataset.sha256}.claim"
+        assert ("check", fixed) in cloud.calls
+        assert cloud.objects[fixed] == cloud.objects[f"{ARCHIVE}/run/.v1-US-holdout.claim"]
         for name in (".v1-US-holdout.claim", "stage_a.json", "stage_b.json", "pass.json"):
             assert ("check", f"{ARCHIVE}/run/{name}") in cloud.calls
         return read_partition(*args)
@@ -264,7 +279,7 @@ def test_holdout_archive_evidence_verified_before_any_partition_read_s8_s10(tmp_
     assert f"{ARCHIVE}/run/holdout.json" in cloud.objects
 
 
-@pytest.mark.parametrize("failure", ["upload", "read", "size", "hash", "old_claim"])
+@pytest.mark.parametrize("failure", ["upload", "read", "size", "hash", "list", "identical_claim"])
 def test_failed_holdout_archive_spends_claim_without_reading_prices_s8_s10(
     tmp_path, monkeypatch, cloud, failure,
 ):
@@ -282,14 +297,31 @@ def test_failed_holdout_archive_spends_claim_without_reading_prices_s8_s10(
     elif failure == "hash":
         payload = (run / "stage_a.json").read_bytes()
         cloud.objects[f"{ARCHIVE}/run/stage_a.json"] = b"x" + payload[1:]
+    elif failure == "list":
+        cloud.fail_list = True
     else:
-        cloud.objects[f"{ARCHIVE}/run/.v1-US-holdout.claim"] = b"old attempt"
+        create_claim = partitions.claim_holdout
+
+        def restore_existing_remote_claim(*args):
+            claim = create_claim(*args)
+            cloud.objects[f"{ARCHIVE}/run/{claim.name}"] = claim.read_bytes()
+            return claim
+
+        monkeypatch.setattr(partitions, "claim_holdout", restore_existing_remote_claim)
     with pytest.raises(SystemExit, match="2"):
         main([
             "holdout", "--market", "US", "--data", str(dataset.manifest),
             "--out", str(run), "--archive", ARCHIVE,
         ])
-    assert (dataset.manifest.parent / ".v1-US-holdout.claim").is_file()
+    claim = dataset.manifest.parent / ".v1-US-holdout.claim"
+    record = json.loads(claim.read_bytes())
+    assert record["attempt_id"]
+    assert record["claimed_at_utc"].endswith("+00:00")
+    if failure in ("list", "identical_claim"):
+        expected = [("list", f"{ARCHIVE}/holdout-claims/v1-US-{dataset.sha256}.claim")]
+        if failure == "identical_claim":
+            expected.append(("list", f"{ARCHIVE}/run/{claim.name}"))
+        assert cloud.calls == expected
     assert not (run / "holdout.json").exists()
 
 
@@ -305,3 +337,22 @@ def test_failed_final_archive_exits_with_error(tmp_path, cloud, monkeypatch):
             "--out", str(run), "--archive", ARCHIVE,
         ])
     assert (run / "stage_a.json").is_file()
+
+
+def test_fixed_remote_claim_blocks_new_output_directory_before_price_io_s8(tmp_path, monkeypatch, cloud, capsys):
+    dataset = _dataset(tmp_path, [("2023-01-03", "2023-01-03")])
+    run = tmp_path / "different-run"
+    _pass(run, dataset)
+    fixed = f"{ARCHIVE}/holdout-claims/v1-US-{dataset.sha256}.claim"
+    cloud.objects[fixed] = b"claim from the original run"
+    monkeypatch.setattr("atr_breakout.cli._code_commit", lambda **_: COMMIT)
+    monkeypatch.setattr(partitions, "_read_partition", lambda *a: pytest.fail("unexpected price I/O"))
+
+    with pytest.raises(SystemExit, match="2"):
+        main([
+            "holdout", "--market", "US", "--data", str(dataset.manifest),
+            "--out", str(run), "--archive", ARCHIVE,
+        ])
+    assert "remote holdout claim already exists" in capsys.readouterr().err
+    assert cloud.calls == [("list", fixed)]
+    assert not (run / "holdout.json").exists()

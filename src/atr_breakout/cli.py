@@ -65,7 +65,9 @@ def _run(args, command):
     if holdout_run and any((holdout_run / name).exists() for name in ("holdout_gross.json", "holdout.json")):
         raise ValueError("Holdout output already exists")
     def archive_claim(claim: Path) -> None:
-        archive_holdout_evidence(holdout_run, claim, destination)
+        archive_holdout_evidence(
+            holdout_run, claim, destination, market=dataset.market, manifest_sha256=dataset.sha256,
+        )
 
     minutes, checksums = load_minutes(
         dataset, commit=commit, holdout_run=holdout_run,

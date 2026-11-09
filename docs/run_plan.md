@@ -74,12 +74,14 @@ before advancing to the next step.
    the holdout simulation. Crypto 2025+ is outside every permitted range.
 4. The canonical dataset directory must be writable for the exclusive holdout
    claim. Before opening any price partition, the runner archives and verifies
-   the claim plus `stage_a.json`, `stage_b.json`, and `pass.json`. An upload or
-   verification failure stops the run and leaves the attempt spent. Preserve
-   the claim in the canonical dataset directory. If the VM is replaced,
-   restore the archived run files and claim to their original locations.
-   Keep the same archive prefix and run ID so any existing remote claim
-   blocks a new attempt even if the local claim was lost.
+   the claim plus `stage_a.json`, `stage_b.json`, and `pass.json`. The runner
+   first checks both remote claim paths, which requires list access. It stores
+   a claim at `<prefix>/holdout-claims/v1-<market>-<manifest_sha256>.claim`
+   and a copy in the run archive. A failed check, upload, or verification
+   stops the run and leaves the attempt spent. Preserve the claim in the
+   canonical dataset directory. If the VM is replaced, restore the archived
+   run files and claim. Keep the same archive prefix. The fixed claim blocks
+   a new attempt for that manifest even if the local claim and run ID change.
 5. For cards, use `atr-bo cards --schema <pinned-schema.json>` with the same data
    and market arguments and a fresh private output directory. Only DEV and OOS
    are used. For US or NSE, generate the DEV/OOS schedule with
