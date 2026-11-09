@@ -81,4 +81,20 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Write the seeded v1 study fixture")
     parser.add_argument("--out", type=Path, required=True)
-    print(write_study_fixture(parser.parse_args().out))
+    parser.add_argument("--nse-memory", action="store_true", help="Write NSE-shaped memory fixture")
+    parser.add_argument("--years", type=int, help="NSE fixture years (default: 1, max: 8)")
+    parser.add_argument("--symbols", type=int, help="NSE fixture symbol count (default: 233)")
+    args = parser.parse_args()
+    if args.nse_memory:
+        from synthetic.nse_memory import DEFAULT_SYMBOLS, write_nse_memory_fixture
+
+        years = args.years if args.years is not None else 1
+        symbols = args.symbols if args.symbols is not None else DEFAULT_SYMBOLS
+        try:
+            print(write_nse_memory_fixture(args.out, years=years, symbols=symbols))
+        except ValueError as error:
+            parser.error(str(error))
+    elif args.years is not None or args.symbols is not None:
+        parser.error("--years and --symbols require --nse-memory")
+    else:
+        print(write_study_fixture(args.out))

@@ -119,3 +119,30 @@ measurements. The numbers vary with coverage, eligible symbols, and card counts.
 
 The acceptance target is below 12 GB peak RSS for NSE DEV/OOS cards.
 Record the actual peak RSS on atr-free before treating that target as verified.
+
+### Measure the synthetic NSE cards run on atr-free
+
+On Linux, activate the editable environment from the repository root and supply
+the pinned Trade555 card schema. The script generates a new synthetic fixture,
+runs the actual cards CLI with GNU `/usr/bin/time -v`, and prints peak RSS.
+It saves the full timing log as `cards.time.txt` and the card counts in
+`cards/public/manifest.json`. The generator writes 233 synthetic symbols and
+375 minutes per XBOM session from 09:15 to 15:30 Kolkata time by default.
+
+```sh
+scripts/nse_memory_check.sh "$(mktemp -d)" /path/to/event_card_v2.json
+```
+
+The default is one calendar year (2015). For a small functional check, add
+`1 2` as the last two arguments. To measure the full 2015–2022 DEV/OOS span,
+keep 233 symbols and set the year argument to `8`. Use a fresh output directory
+and allow disk space for the larger fixture and card export.
+
+```sh
+scripts/nse_memory_check.sh "$(mktemp -d)" /path/to/event_card_v2.json 8
+```
+
+The eight-year fixture has about eight times as many retained bars as the
+one-year fixture. The one-year RSS is a sizing check. Compare the measured
+eight-year peak against 12,000,000,000 bytes (11,718,750 KiB) to verify the
+target. Both commands use synthetic data and omit the bucket archive.
