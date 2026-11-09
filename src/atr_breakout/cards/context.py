@@ -10,7 +10,10 @@ MINUTE = pd.Timedelta(minutes=1)
 QUARTER_HOUR = 15 * MINUTE
 
 
-def _cash_schedule(sessions, zone):
+def card_session_schedule(sessions, market):
+    if market not in CASH_SESSIONS:
+        return None
+    zone = CASH_SESSIONS[market][0]
     if not sessions:
         raise ValueError("Cash cards require an authoritative session schedule")
     opens = [pd.Timestamp(session["open"]) for session in sessions]
@@ -34,15 +37,14 @@ def _cash_schedule(sessions, zone):
     return schedule
 
 
-def higher_timeframes(minutes: pd.DataFrame, market: str, *, sessions=None) -> dict[str, dict[str, pd.DataFrame]]:
-    """Return indicator-enriched h1/h4/d frames keyed by symbol, then prefix."""
-    cutoff = minutes["ts_utc"].max() + MINUTE
+def aggregate_higher_timeframes(minutes, market, schedule):
+    """Aggregate OHLC without applying the dataset cutoff or indicator warmup."""
     cash = market in CASH_SESSIONS
     if cash:
         zone = CASH_SESSIONS[market][0]
         trading_date = minutes["ts_utc"].dt.tz_convert(zone).dt.date
         source = minutes.assign(trading_date=trading_date).merge(
-            _cash_schedule(sessions, zone), on="trading_date", how="inner", sort=False,
+            schedule, on="trading_date", how="inner", sort=False,
         )
         source = source.loc[
             source["ts_utc"].ge(source["session_open"]) & source["ts_utc"].lt(source["session_close"])
@@ -50,7 +52,7 @@ def higher_timeframes(minutes: pd.DataFrame, market: str, *, sessions=None) -> d
     else:
         source = minutes
 
-    contexts = {}
+    timeframes = {}
     for prefix, width in WIDTHS.items():
         stamp = source["ts_utc"]
         if cash:
@@ -58,12 +60,12 @@ def higher_timeframes(minutes: pd.DataFrame, market: str, *, sessions=None) -> d
             opening, closing = source["session_open"], source["session_close"]
             start = opening if prefix == "d" else opening + (stamp - opening).dt.floor(width)
             end = closing if prefix == "d" else start + width
-            eligible = end.le(closing) & end.le(cutoff)
+            eligible = end.le(closing)
         else:
             # Trade555 sources.py:414–452 (IG) and :685–709 (Kraken archive).
             start = stamp.dt.floor(width)
             end = start + width
-            eligible = end.le(cutoff)
+            eligible = stamp.notna()
 
         grouped = source.loc[eligible].groupby(
             ["symbol", start.loc[eligible].rename("bar_start"), end.loc[eligible].rename("bar_end")],
@@ -76,12 +78,31 @@ def higher_timeframes(minutes: pd.DataFrame, market: str, *, sessions=None) -> d
         )
         bars["volume"] = grouped["volume"].sum(min_count=1).where(bars["volume_count"].eq(bars["minute_count"]))
         bars = bars.reset_index().rename(columns={"bar_start": "ts_utc"})
-        if cash or market == "CRYPTO":
+        if cash:
             complete = bars["minute_count"].eq((bars["bar_end"] - bars["ts_utc"]) // MINUTE)
             bars = bars.loc[complete]
         if market == "FX_GOLD":
             bars["volume"] = float("nan")
-        for symbol, frame in bars.groupby("symbol", sort=False):
+        timeframes[prefix] = bars
+    return timeframes
+
+
+def context_indicators(timeframes, cutoff, market):
+    """Apply the final data cutoff, then calculate indicators per symbol."""
+    contexts = {}
+    for prefix, bars in timeframes:
+        complete = bars["bar_end"].le(cutoff)
+        if market == "CRYPTO":
+            complete &= bars["minute_count"].eq((bars["bar_end"] - bars["ts_utc"]) // MINUTE)
+        completed = bars.loc[complete]
+        for symbol, frame in completed.groupby("symbol", sort=False):
             ordered = frame.sort_values("ts_utc").reset_index(drop=True)
             contexts.setdefault(symbol, {})[prefix] = add_indicators(ordered)
     return contexts
+
+
+def higher_timeframes(minutes: pd.DataFrame, market: str, *, sessions=None) -> dict[str, dict[str, pd.DataFrame]]:
+    """Return indicator-enriched h1/h4/d frames keyed by symbol, then prefix."""
+    schedule = card_session_schedule(sessions, market)
+    timeframes = aggregate_higher_timeframes(minutes, market, schedule)
+    return context_indicators(timeframes.items(), minutes["ts_utc"].max() + MINUTE, market)

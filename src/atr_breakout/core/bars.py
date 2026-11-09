@@ -43,6 +43,11 @@ def build_bars(minutes: pd.DataFrame, market: str) -> pd.DataFrame:
     bars = bars.reset_index()
     bars["missing_minutes"] = BAR_MINUTES - bars["minute_count"]
     bars["trading_date"] = bars["ts_utc"].dt.tz_convert(timezone).dt.date
+    return mark_overnight(bars, market)
+
+
+def mark_overnight(bars: pd.DataFrame, market: str) -> pd.DataFrame:
+    """Mark transitions on chronologically ordered bars, including across partitions."""
     bars["overnight"] = False
     if market in CASH_SESSIONS:
         previous_date = bars.groupby("symbol", sort=False)["trading_date"].shift()

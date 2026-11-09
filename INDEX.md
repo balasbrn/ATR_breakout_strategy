@@ -29,7 +29,8 @@ data/                 one adapter per vendor -> one standard 1-minute frame
   kraken.py           crypto spot, plus the completeness and gap-fill rules (§12 O5)
   ctrader_fx.py       FX and XAUUSD; tick volume dropped (§2, §3)
   windows.py          dev / OOS / holdout dates per market, and the holdout lock (§8)
-  partitions.py       manifest-backed canonical minute reader
+  partitions.py       manifest-backed daily minute iterator
+  crypto_gaps.py      isolated crypto minute fills across partition boundaries
   sessions.py         generate DEV/OOS cash session schedules
 core/                 pure functions on one symbol's bars
   bars.py             1-minute -> 15-minute bars, sessions, overnight marks (§3)

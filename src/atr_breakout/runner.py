@@ -1,27 +1,84 @@
 """Connect authorized canonical bars to study and card modules."""
 
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import date
 
 import pandas as pd
 
+from atr_breakout.cards.context import aggregate_higher_timeframes, card_session_schedule, context_indicators
 from atr_breakout.contract_v1 import MAX_HOLD_BARS, STUDY_WINDOWS
-from atr_breakout.core.bars import BAR_SIZE, build_bars
+from atr_breakout.core.bars import BAR_SIZE, build_bars, mark_overnight
 from atr_breakout.core.costs import cost_basis_points
 from atr_breakout.core.indicators import add_indicators
 from atr_breakout.core.signal import crypto_entry_eligible, signal_directions
 from atr_breakout.core.trade import simulate_trades
+from atr_breakout.data.crypto_gaps import fill_crypto_day
 from atr_breakout.study.benchmarks import buy_and_hold_pct, random_entry, without_compression
 from atr_breakout.study.passrule import evaluate_stage
 from atr_breakout.study.stats import mean_r
 
 
 def prepare_bars(minutes, market):
-    bars = build_bars(minutes, market)
+    return _symbol_indicators(build_bars(minutes, market))
+
+
+def _symbol_indicators(bars):
     return {
         symbol: add_indicators(frame.reset_index(drop=True))
         for symbol, frame in bars.groupby("symbol", sort=True)
     }
+
+
+def _apply_midnight_fills(day, prior_counts, prior_bars, higher_parts):
+    # The prior bar already contains the last observed close. Appended flat,
+    # zero-volume minutes can change coverage but cannot change its OHLC.
+    midnight = pd.Timestamp(day, tz="UTC")
+    mask = prior_bars["ts_utc"].eq(midnight - BAR_SIZE)
+    counts = prior_bars.loc[mask, "symbol"].map(prior_counts).fillna(0).astype(int)
+    prior_bars.loc[mask, "minute_count"] += counts
+    prior_bars.loc[mask, "filled_minutes"] += counts
+    prior_bars.loc[mask, "missing_minutes"] -= counts
+    volume = prior_bars.loc[mask, "volume"]
+    prior_bars.loc[mask, "volume"] = volume.mask(counts.gt(0) & volume.isna(), 0)
+    for parts in higher_parts.values():
+        context = parts[-1]
+        mask = context["bar_end"].eq(midnight)
+        counts = context.loc[mask, "symbol"].map(prior_counts).fillna(0).astype(int)
+        context.loc[mask, "minute_count"] += counts
+        context.loc[mask, "volume_count"] += counts
+
+
+def prepare_partitioned_bars(partitions, market, *, cards=False, sessions=None):
+    """Keep one minute partition at a time and retain the aggregated history."""
+    schedule = card_session_schedule(sessions, market) if cards else None
+    bar_parts, higher_parts = [], defaultdict(list)
+    checksums = {}
+    cutoff = None
+    carry = None
+    for day, minutes, checksum in partitions:
+        if market == "CRYPTO":
+            minutes, prior_counts, carry = fill_crypto_day(minutes, carry)
+            if not prior_counts.empty:
+                _apply_midnight_fills(day, prior_counts, bar_parts[-1], higher_parts)
+        bar_parts.append(build_bars(minutes, market))
+        if cards:
+            for prefix, bars in aggregate_higher_timeframes(minutes, market, schedule).items():
+                higher_parts[prefix].append(bars)
+            cutoff = minutes["ts_utc"].max() + pd.Timedelta(minutes=1)
+        checksums[day.isoformat()] = checksum
+        del minutes
+
+    bars = pd.concat(bar_parts, ignore_index=True)
+    bar_parts.clear()
+    frames = _symbol_indicators(mark_overnight(bars, market))
+    del bars
+    higher = {}
+    if cards:
+        higher = context_indicators(
+            ((prefix, pd.concat(higher_parts.pop(prefix), ignore_index=True)) for prefix in tuple(higher_parts)),
+            cutoff, market,
+        )
+    return frames, higher, checksums
 
 
 def _between(days, window):
