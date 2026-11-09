@@ -7,7 +7,7 @@ import subprocess
 
 
 def _safe_path(value: str) -> bool:
-    return all(re.fullmatch(r"[A-Za-z0-9_.-]+", part) and part not in (".", "..")
+    return all(re.fullmatch(r"[A-Za-z0-9_.=-]+", part) and part not in (".", "..")
                for part in value.split("/"))
 
 

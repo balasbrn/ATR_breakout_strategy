@@ -229,7 +229,9 @@ def test_cards_archive_preserves_nested_paths(tmp_path, cloud, monkeypatch):
     manifest = write_study_fixture(tmp_path / "fixture")
 
     def write_fake_cards(directory, *_args, **_kwargs):
-        (directory / "public").mkdir(parents=True)
+        partition = directory / "public" / "entry" / "day_key=1" / "part-00000.parquet"
+        partition.parent.mkdir(parents=True)
+        partition.write_bytes(b"synthetic card partition")
         (directory / "public" / "manifest.json").write_text("{}")
         (directory / "event_map.parquet").write_bytes(b"synthetic private map")
 
@@ -241,6 +243,7 @@ def test_cards_archive_preserves_nested_paths(tmp_path, cloud, monkeypatch):
     assert cloud.objects == {
         f"{ARCHIVE}/card-run/event_map.parquet": b"synthetic private map",
         f"{ARCHIVE}/card-run/public/manifest.json": b"{}",
+        f"{ARCHIVE}/card-run/public/entry/day_key=1/part-00000.parquet": b"synthetic card partition",
     }
 
 
