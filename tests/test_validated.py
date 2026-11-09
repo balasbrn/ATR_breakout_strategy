@@ -224,3 +224,18 @@ def test_inventory_discovers_symbols_from_audits_without_folder_markers(tmp_path
     for symbol, record in symbols.items():
         assert record["path"] == str(directory / f"symbol={symbol}" / "bars.parquet")
         assert record["usable_from"] == "2022-12-30"
+
+
+@pytest.mark.parametrize("missing", ["audit.json", "bars.parquet"])
+def test_inventory_refuses_incomplete_symbol_even_with_complete_peer(tmp_path, missing):
+    import re
+
+    from atr_breakout.data.validated import _inventory
+
+    root = tmp_path / "validated"
+    _source(root, symbol="FAKE_COMPLETE")
+    incomplete = _source(root, symbol="FAKE_INCOMPLETE")
+    (incomplete / missing).unlink()
+
+    with pytest.raises(ValueError, match=rf"Missing {re.escape(missing)} for validated symbol FAKE_INCOMPLETE"):
+        _inventory(fs.LocalFileSystem(), str(root), "US")
