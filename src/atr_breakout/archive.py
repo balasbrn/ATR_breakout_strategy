@@ -72,10 +72,10 @@ def _require_claim_absent(target: str) -> None:
 
 
 def archive_holdout_evidence(
-    run: Path, claim: Path, destination: str, *, market: str, manifest_sha256: str,
+    run: Path, claim: Path, destination: str, *, market: str, manifest_sha256: str, purpose: str = "holdout",
 ) -> None:
     archive_prefix = destination.rsplit("/", 1)[0]
-    claims = f"{archive_prefix}/holdout-claims"
+    claims = f"{archive_prefix}/{purpose}-claims"
     fixed_name = f"v1-{market}-{manifest_sha256}.claim"
     _require_claim_absent(f"{claims}/{fixed_name}")
     _require_claim_absent(f"{destination}/{claim.name}")

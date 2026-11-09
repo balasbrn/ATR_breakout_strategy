@@ -33,6 +33,8 @@ data/                 one adapter per vendor -> one standard 1-minute frame
   partitions.py       manifest-backed daily minute iterator
   crypto_gaps.py      isolated crypto minute fills across partition boundaries
   sessions.py         generate DEV/OOS cash session schedules
+  validated.py        convert Trade555 symbol files to authorized daily partitions
+  validated_parquet.py cutoff-safe Arrow scans and timestamp footer diagnostics
 core/                 pure functions on one symbol's bars
   bars.py             1-minute -> 15-minute bars, sessions, overnight marks (§3)
   indicators.py       Wilder ATR(14), ATR % of price, ATR_Rank_30d, EMA, RSI (§3)
@@ -78,6 +80,7 @@ and a synthetic dry run.
 
 ```
 python -m synthetic.generate --out <dir>
+atr-bo convert --market US --phase study --source <gs-prefix> --out <canonical-dir>
 atr-bo stage-a --data <manifest> --market US --out <run-dir>
 atr-bo stage-b --data <manifest> --market US --out <run-dir>
 atr-bo holdout --data <manifest> --market US --out <run-dir>

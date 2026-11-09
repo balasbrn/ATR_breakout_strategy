@@ -39,10 +39,29 @@ including reserved dates, using relative paths and SHA-256 checksums.
 }
 ```
 
-Vendor normalization and the symbol manifest are input prerequisites. The real
-crypto command refuses to load prices pending the approved annual completeness
-and isolated-gap adapter. Crypto coverage for holdout years must be gathered
-from minute-count metadata. The coverage step must not open reserved prices.
+Use the Trade555 validated v1.1 root as a runtime GCS prefix. Keep the canonical
+output outside the repository on atr-free.
+
+```sh
+atr-bo convert --market US --phase study --source "$validated_prefix" --out "$study_data"
+```
+
+The converter reads the audited symbol files, keeps valid and usable rows from
+each symbol's audit start date, and writes one local Parquet partition per
+trading date. US uses raw regular-session OHLC and ignores adjustment factors.
+NSE keeps delivered adjusted OHLC. FX and gold use all eight symbols and drop
+tick volume. The crypto screen reads only eligible timestamps and flag columns,
+counts annual coverage before converting prices, and excludes 2025 onward.
+The runner fills isolated crypto gaps in the canonical input.
+
+Study price scans end at the frozen DEV/OOS boundary. Arrow filters at read,
+then the reader masks each batch again before conversion sees it. A mixed row
+group may be decoded internally, and the manifest records the number that
+straddled the cutoff based only on footer timestamp bounds. Out-of-window
+prices never enter conversion statistics, logs, or output partitions.
+The manifest records source file sizes and modification times, audit checksums,
+and the SHA-256 of each canonical partition. The GCS prefix is supplied only
+at runtime.
 
 ## Sequence after owner review
 
@@ -72,6 +91,21 @@ before advancing to the next step.
    manifest, market, and code commit before opening holdout price partitions.
    DEV and OOS bars then provide indicator warmup. Only holdout signals enter
    the holdout simulation. Crypto 2025+ is outside every permitted range.
+   For validated-layer input, convert reserved prices to a separate directory
+   only after both stages pass. The original study manifest stays byte-identical.
+
+   ```sh
+   atr-bo convert --market US --phase holdout --source "$validated_prefix" \
+     --study-data "$study_data/minutes.json" --run "$run_dir" \
+     --archive "$archive_prefix" --out "$reserved_data"
+   atr-bo holdout --market US --data "$study_data/minutes.json" \
+     --holdout-data "$reserved_data/minutes.json" --out "$run_dir" --archive "$archive_prefix"
+   ```
+
+   Conversion and simulation each have one claim. Conversion archives its
+   claim under `holdout-conversion-claims/` before reading reserved source prices.
+   Simulation verifies the study evidence and the linkage between manifests,
+   then claims and archives the single execution before reading canonical prices.
 4. The canonical dataset directory must be writable for the exclusive holdout
    claim. Before opening any price partition, the runner archives and verifies
    the claim plus `stage_a.json`, `stage_b.json`, and `pass.json`. The runner
@@ -103,7 +137,7 @@ time. It releases the minute frame before opening the next file and retains
 the 15-minute bars, plus H1, H4, and daily bars for cards. Crypto keeps one
 observed minute per symbol from the previous partition so gaps of at most
 three minutes can be filled across UTC midnight. Longer gaps stay missing.
-The real crypto annual completeness check remains an adapter prerequisite.
+The annual crypto completeness screen runs during validated-layer conversion.
 
 These are planning estimates for DEV/OOS cards on atr-free (4 OCPU, 24 GB),
 using dense bar counts and allowing for pandas aggregation, indicator frames,

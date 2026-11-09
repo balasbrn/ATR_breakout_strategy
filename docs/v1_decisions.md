@@ -43,10 +43,11 @@ Contract: random bar per market, same direction mix, same 1R rule, same 20-bar h
 
 ## 4. Data and boundaries (§2, §8, §12)
 
-- **Data source and schemas:** the validated 1-minute files in the Trade555 data bucket. Their
-  layout is not in this repo yet; the owner provides a small sample per vendor, and each adapter
-  in `data/` is written and tested against that layout. Until then, adapters target the standard
-  frame in `data/schema.py`.
+- **Data source and schemas:** Trade555 validated v1.1 stores one `bars.parquet` and
+  `audit.json` per symbol. The converter reads the runtime GCS prefix and writes
+  the canonical minute schema in `data/schema.py`.
+- **Usable minutes (OWNER):** Treat Trade555 `usable=false` minutes as missing.
+  Each symbol's eligible history starts on its audit's `usable_from` date.
 - **Bars:** built in UTC, aligned to :00, :15, :30, :45.
   - US: regular hours 09:30–16:00 America/New_York.
   - NSE: 09:15–15:30 Asia/Kolkata.
