@@ -10,7 +10,8 @@ line here in the same pull request.
 | `v1/` | Frozen contract, report (only "pending" cells get filled) | yes |
 | `docs/` | Event-card format, output formats, data notes | yes |
 | `src/atr_breakout/` | The code (layout below) | yes |
-| `synthetic/generate.py` | Seeded generator of fake 1-minute data with planted patterns | yes |
+| `synthetic/generate.py`, `synthetic/nse_memory.py` | Seeded minute fixtures and the NSE memory fixture | yes |
+| `scripts/nse_memory_check.sh` | Synthetic NSE cards peak-RSS check for Linux | yes |
 | `tests/` | pytest, synthetic data only | yes |
 | `pyproject.toml` | Package metadata and pytest configuration | yes |
 | `runs/` | Small run summaries: counts, metrics, checksums (no data) | yes |
