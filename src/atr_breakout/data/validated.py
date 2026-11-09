@@ -29,12 +29,15 @@ def _midnight(day, zone="UTC"):
 
 def _inventory(filesystem, root, market):
     directory = f"{root.rstrip('/')}/{DATASETS[market]}"
-    symbols = {}
+    symbols, excluded = {}, {}
     for entry in filesystem.get_file_info(fs.FileSelector(directory)):
         name = PurePosixPath(entry.path).name
         if entry.type != fs.FileType.Directory or not name.startswith("symbol="):
             continue
         symbol = name.removeprefix("symbol=")
+        if market == "US" and symbol == "GOOG":
+            excluded[symbol] = "contract §2: one company, GOOGL kept"
+            continue
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", symbol):
             raise ValueError("Invalid symbol partition name")
         with filesystem.open_input_file(f"{entry.path}/audit.json") as source:
@@ -55,7 +58,7 @@ def _inventory(filesystem, root, market):
         raise ValueError("No validated symbol files found for this market")
     if market == "FX_GOLD" and len(symbols) != 8:
         raise ValueError("The frozen FX and gold spoke requires eight validated symbols")
-    return dict(sorted(symbols.items()))
+    return dict(sorted(symbols.items())), excluded
 
 
 def _eligible(start):
@@ -127,7 +130,7 @@ def convert_validated(
         if study.market != market or study.synthetic != synthetic:
             raise ValueError("Holdout conversion does not match the study dataset")
 
-    inventory = _inventory(filesystem, root, market)
+    inventory, excluded = _inventory(filesystem, root, market)
     fingerprints = {
         symbol: {key: value for key, value in info.items() if key != "path"}
         for symbol, info in inventory.items()
@@ -188,7 +191,7 @@ def convert_validated(
     conversion = {
         "layout": VALIDATED_LAYOUT, "phase": "holdout" if holdout else "study",
         "cutoff_utc": cutoff.isoformat(), "straddling_row_groups": straddled,
-        "sources": fingerprints, "crypto_coverage": coverage,
+        "sources": fingerprints, "crypto_coverage": coverage, "excluded": excluded,
     }
     if holdout:
         conversion["study_manifest_sha256"] = study.sha256

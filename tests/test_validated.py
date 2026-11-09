@@ -80,6 +80,20 @@ def test_convert_study_drops_reserved_rows_and_uses_raw_us_prices_s2_s8(tmp_path
     assert len(source[1]) == 1
 
 
+def test_convert_study_keeps_only_googl_for_alphabet_s2(tmp_path):
+    from atr_breakout.data.validated import convert_validated
+
+    root = tmp_path / "validated"
+    _source(root, symbol="GOOGL")
+    _source(root, symbol="GOOG")
+    output = convert_validated(fs.LocalFileSystem(), str(root), tmp_path / "out", market="US", synthetic=True)
+    study = open_dataset(output, "US")
+    _, minutes, _ = next(iter_minute_partitions(study, commit=COMMIT))
+    assert minutes["symbol"].unique().tolist() == ["GOOGL"]
+    assert set(study.conversion["sources"]) == {"GOOGL"}
+    assert study.conversion["excluded"] == {"GOOG": "contract §2: one company, GOOGL kept"}
+
+
 def test_convert_holdout_requires_pass_then_archives_before_price_read_s8_s10(tmp_path, source, monkeypatch):
     study = _convert(tmp_path, "study")
     run = tmp_path / "run"

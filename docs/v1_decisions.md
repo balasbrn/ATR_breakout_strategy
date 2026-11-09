@@ -48,6 +48,9 @@ Contract: random bar per market, same direction mix, same 1R rule, same 20-bar h
   the canonical minute schema in `data/schema.py`.
 - **Usable minutes (OWNER):** Treat Trade555 `usable=false` minutes as missing.
   Each symbol's eligible history starts on its audit's `usable_from` date.
+- **Alphabet share class (OWNER):** Keep GOOGL in the US spoke and exclude GOOG
+  under the one-company rule in §2. Record the exclusion in the conversion manifest
+  when GOOG is present in the source.
 - **Bars:** built in UTC, aligned to :00, :15, :30, :45.
   - US: regular hours 09:30–16:00 America/New_York.
   - NSE: 09:15–15:30 Asia/Kolkata.

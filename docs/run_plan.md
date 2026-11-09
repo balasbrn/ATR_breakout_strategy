@@ -48,7 +48,8 @@ atr-bo convert --market US --phase study --source "$validated_prefix" --out "$st
 
 The converter reads the audited symbol files, keeps valid and usable rows from
 each symbol's audit start date, and writes one local Parquet partition per
-trading date. US uses raw regular-session OHLC and ignores adjustment factors.
+trading date. US uses raw regular-session OHLC, ignores adjustment factors, and
+keeps GOOGL as the sole Alphabet share class.
 NSE keeps delivered adjusted OHLC. FX and gold use all eight symbols and drop
 tick volume. The crypto screen reads only eligible timestamps and flag columns,
 counts annual coverage before converting prices, and excludes 2025 onward.
@@ -124,7 +125,10 @@ before advancing to the next step.
    beside the data. The JSON records the calendar version and UTC session times.
    Higher timeframes use the same authorized minutes. Publish only the export's
    `public/` directory. Liquidity and benchmark context are separate follow-ups.
-6. Archive the metrics and checksums for the report. Review moved-stop
+6. Archive the metrics and checksums for the report. Include a reporting caveat
+   that the frozen NSE universe includes indices such as INDIA_VIX and that
+   equity costs may not apply to them. Show NSE results both with and without
+   the indices, using the full universe for the primary verdict. Review moved-stop
    open-price diagnostics separately from overnight gaps, and the count of
    crypto exits after more than 20 UTC slots. This CLI produces JSON metrics.
    Private per-trade delivery and filling the frozen report template are
