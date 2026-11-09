@@ -52,11 +52,14 @@ def archive_file(path: Path, destination: str, name: str) -> None:
         raise ValueError(f"Archived size or SHA-256 differs: {name}")
 
 
-def archive_directory(directory: Path, destination: str) -> None:
+def archive_directory(directory: Path, destination: str, *, trade_phase: str | None = None) -> None:
     for path in sorted(directory.rglob("*")):
         if path.is_dir() and not path.is_symlink():
             continue
-        archive_file(path, destination, path.relative_to(directory).as_posix())
+        name = path.relative_to(directory).as_posix()
+        if name == "trades.parquet" and trade_phase:
+            name = f"trades/{trade_phase}/{name}"
+        archive_file(path, destination, name)
 
 
 def _require_claim_absent(target: str) -> None:

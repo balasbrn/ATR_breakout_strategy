@@ -41,11 +41,13 @@ def _eligible_positions(
     return np.flatnonzero(eligible.to_numpy()[:max(0, len(bars) - MAX_HOLD_BARS)])
 
 
-def _draw(rng, valid: np.ndarray, count: int) -> tuple[np.ndarray, int]:
+def _draw(rng, valid: np.ndarray, count: int, record_gaps=None) -> tuple[np.ndarray, int]:
     picks = rng.integers(len(valid), size=count)
     rejected = ~valid[picks]
     skipped = int(rejected.sum())
     while rejected.any():
+        if record_gaps is not None:
+            record_gaps(picks[rejected])
         picks[rejected] = rng.integers(len(valid), size=int(rejected.sum()))
         rejected = ~valid[picks]
         skipped += int(rejected.sum())
@@ -54,7 +56,7 @@ def _draw(rng, valid: np.ndarray, count: int) -> tuple[np.ndarray, int]:
 
 def random_entry(
     bars_by_symbol: dict[str, pd.DataFrame], taken_directions: pd.Series,
-    *, market: str, cost_bp: float, window: tuple[date, date] | None = None,
+    *, market: str, cost_bp: float, window: tuple[date, date] | None = None, record=None,
 ) -> RandomBenchmark:
     """Draw uniformly over eligible symbol/bar pairs with replacement.
 
@@ -71,7 +73,8 @@ def random_entry(
     if window is not None and window[0] > window[1]:
         raise ValueError("Benchmark window must be in chronological order")
 
-    frames = [bars_by_symbol[symbol] for symbol in sorted(bars_by_symbol)]
+    symbols = sorted(bars_by_symbol)
+    frames = [bars_by_symbol[symbol] for symbol in symbols]
     positions = [_eligible_positions(bars, market, window) for bars in frames]
     sizes = [len(indices) for indices in positions]
     if not sum(sizes):
@@ -83,7 +86,8 @@ def random_entry(
     draw_sums = np.zeros(len(RANDOM_BENCHMARK_SEEDS))
     skipped_gap = 0
 
-    for direction, count in counts.items():
+    validity = {}
+    for direction in counts.index:
         stop_column = "low" if direction == 1 else "high"
         valid = np.concatenate([
             direction * (
@@ -95,14 +99,29 @@ def random_entry(
         if not valid.any():
             return RandomBenchmark((), 0)
 
+        validity[direction] = valid
+
+    def record_gaps(picks, direction, seed):
+        for pick in picks:
+            index = int(offsets.searchsorted(pick, side="right") - 1)
+            result = SignalResult(int(candidates[pick]), int(direction), "SKIPPED_GAP")
+            record(symbols[index], frames[index], result, seed=seed)
+
+    for direction, count in counts.items():
+        count = int(count)
         samples = []
-        for rng in generators:
-            picks, rejected = _draw(rng, valid, int(count))
+        for seed, rng in zip(RANDOM_BENCHMARK_SEEDS, generators, strict=True):
+            gap_callback = (lambda picks: record_gaps(picks, direction, seed)) if record else None
+            picks, rejected = _draw(rng, validity[direction], count, gap_callback)
             samples.append(picks)
             skipped_gap += rejected
         draws = np.stack(samples)
         picked, inverse = np.unique(draws, return_inverse=True)
         values = np.empty(len(picked))
+        if record:
+            flat = draws.ravel()
+            draw_order = np.argsort(flat, kind="stable")
+            sorted_draws = flat[draw_order]
         for index, bars in enumerate(frames):
             start, end = picked.searchsorted(offsets[index:index + 2])
             indices = candidates[picked[start:end]]
@@ -112,6 +131,12 @@ def random_entry(
             directions.iloc[indices] = direction
             trades = simulate_trades(bars, directions, cost_bp=cost_bp, independent=True)
             values[start:end] = [result.trade.r_net for result in trades]
+            if record:
+                by_position = {trade.signal_bar: trade for trade in trades}
+                first, last = sorted_draws.searchsorted(offsets[index:index + 2])
+                for draw in draw_order[first:last]:
+                    record(symbols[index], bars, by_position[candidates[flat[draw]]],
+                           seed=RANDOM_BENCHMARK_SEEDS[draw // count])
         draw_sums += values[inverse.reshape(draws.shape)].sum(axis=1)
 
     return RandomBenchmark(tuple((draw_sums / len(taken_directions)).tolist()), skipped_gap)
@@ -121,9 +146,8 @@ def without_compression(
     bars: pd.DataFrame, *, market: str, cost_bp: float,
 ) -> list[SignalResult]:
     directions = signal_directions(bars, require_compression=False)
-    if market == "CRYPTO":
-        directions = directions.where(crypto_entry_eligible(bars), 0)
-    return simulate_trades(bars, directions, cost_bp=cost_bp)
+    purity = crypto_entry_eligible(bars) if market == "CRYPTO" else None
+    return simulate_trades(bars, directions, cost_bp=cost_bp, purity=purity)
 
 
 def buy_and_hold_pct(bars_by_symbol: dict[str, pd.DataFrame]) -> float | None:

@@ -131,8 +131,9 @@ before advancing to the next step.
    the indices, using the full universe for the primary verdict. Review moved-stop
    open-price diagnostics separately from overnight gaps, and the count of
    crypto exits after more than 20 UTC slots. This CLI produces JSON metrics.
-   Private per-trade delivery and filling the frozen report template are
-   follow-up integration tasks before publishing research results.
+   Private per-trade delivery is in the run's `trades.parquet`. The archive
+   retains a verified snapshot for each phase. Filling the frozen report
+   template remains a follow-up before publishing research results.
 
 ## Streaming and VM memory budget
 

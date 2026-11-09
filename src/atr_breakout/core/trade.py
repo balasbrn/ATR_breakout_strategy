@@ -9,7 +9,7 @@ import pandas as pd
 from atr_breakout.contract_v1 import ENTRY_OFFSET_BARS, MAX_HOLD_BARS, STOP_REVIEW_BAR
 from atr_breakout.core.costs import round_trip_cost, trade_returns
 
-Status = Literal["TAKEN", "SKIPPED_BUSY", "SKIPPED_GAP", "SKIPPED_BOUNDARY"]
+Status = Literal["TAKEN", "SKIPPED_BUSY", "SKIPPED_GAP", "SKIPPED_BOUNDARY", "SKIPPED_PURITY"]
 ExitReason = Literal["STOP", "BAR5_EXIT", "BREAKEVEN_STOP", "MAX_HOLD"]
 
 
@@ -57,18 +57,22 @@ def _resolve_exit(
 
 
 def simulate_trades(
-    bars: pd.DataFrame, directions: pd.Series, *, cost_bp: float, independent: bool = False
+    bars: pd.DataFrame, directions: pd.Series, *, cost_bp: float, independent: bool = False,
+    purity: pd.Series | None = None,
 ) -> list[SignalResult]:
     """Simulate one cost case on a single symbol's permitted bars.
 
     Directions are indexed like bars, with values -1, 0 or 1. Pass the
-    already eligible directions and only bars the study is allowed to read.
+    scoped directions and only bars the study is allowed to read. Optional
+    purity preserves blocked signals without simulating them.
     A signal needs the full trade window even if it would have exited early.
     All result bar references are integer positions in the supplied frame.
     Independent benchmark draws may overlap.
     """
     if not bars.index.equals(directions.index) or not directions.isin([-1, 0, 1]).all():
         raise ValueError("Directions must align with bars and be -1, 0 or 1")
+    if purity is not None and not bars.index.equals(purity.index):
+        raise ValueError("Purity must align with bars")
     if bars["symbol"].nunique() > 1:
         raise ValueError("Trades require a single symbol")
 
@@ -80,6 +84,9 @@ def simulate_trades(
     for index in np.flatnonzero(signals):
         signal_bar = int(index)
         direction = int(signals[index])
+        if purity is not None and not purity.iloc[signal_bar]:
+            results.append(SignalResult(signal_bar, direction, "SKIPPED_PURITY"))
+            continue
         if signal_bar + MAX_HOLD_BARS >= len(bars):
             results.append(SignalResult(signal_bar, direction, "SKIPPED_BOUNDARY"))
             continue
