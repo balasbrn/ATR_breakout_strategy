@@ -29,30 +29,35 @@ def _midnight(day, zone="UTC"):
 
 def _inventory(filesystem, root, market):
     directory = PurePosixPath(root) / DATASETS[market]
-    symbols, excluded = {}, {}
+    files_by_symbol = {}
     for entry in filesystem.get_file_info(fs.FileSelector(str(directory), recursive=True)):
         path = PurePosixPath(entry.path)
         parent = path.parent
         if (
-            entry.type != fs.FileType.File or path.name != "audit.json"
+            entry.type != fs.FileType.File or path.name not in ("audit.json", "bars.parquet")
             or parent.parent != directory or not parent.name.startswith("symbol=")
         ):
             continue
         symbol = parent.name.removeprefix("symbol=")
+        files_by_symbol.setdefault(symbol, {})[path.name] = entry
+
+    symbols, excluded = {}, {}
+    for symbol, files in sorted(files_by_symbol.items()):
+        for name in ("audit.json", "bars.parquet"):
+            if name not in files:
+                raise ValueError(f"Missing {name} for validated symbol {symbol}")
         if market == "US" and symbol == "GOOG":
             excluded[symbol] = "contract §2: one company, GOOGL kept"
             continue
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", symbol):
             raise ValueError("Invalid symbol partition name")
-        with filesystem.open_input_file(entry.path) as source:
+        with filesystem.open_input_file(files["audit.json"].path) as source:
             audit = source.read()
         record = json.loads(audit)
         if record["symbol"] != symbol:
             raise ValueError("Audit symbol differs from the partition name")
         usable = record["completeness"]["usable_from"]
-        price = filesystem.get_file_info(str(parent / "bars.parquet"))
-        if price.type != fs.FileType.File:
-            raise ValueError(f"Missing validated price file for {symbol}")
+        price = files["bars.parquet"]
         symbols[symbol] = {
             "path": price.path, "size": price.size, "mtime_ns": price.mtime_ns,
             "audit_sha256": hashlib.sha256(audit).hexdigest(),
@@ -62,7 +67,7 @@ def _inventory(filesystem, root, market):
         raise ValueError("No validated symbol files found for this market")
     if market == "FX_GOLD" and len(symbols) != 8:
         raise ValueError("The frozen FX and gold spoke requires eight validated symbols")
-    return dict(sorted(symbols.items())), excluded
+    return symbols, excluded
 
 
 def _eligible(start):
