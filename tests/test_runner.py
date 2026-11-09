@@ -226,11 +226,13 @@ def test_archives_stage_outputs_under_same_run_id_and_redacts_uri_s6(tmp_path, c
     assert main(["stage-a", *args]) == 0
     first = dict(cloud.objects)
     assert f"{ARCHIVE}/run/stage_a.json" in first
+    assert first[f"{ARCHIVE}/run/trades/stage-a/trades.parquet"] == (run / "trades.parquet").read_bytes()
     assert main(["stage-b", *args]) == 0
     assert f"{ARCHIVE}/run/pass.json" in cloud.objects
     assert all(cloud.objects[key] == value for key, value in first.items())
     for file in run.iterdir():
-        assert cloud.objects[f"{ARCHIVE}/run/{file.name}"] == file.read_bytes()
+        name = "trades/stage-b/trades.parquet" if file.name == "trades.parquet" else file.name
+        assert cloud.objects[f"{ARCHIVE}/run/{name}"] == file.read_bytes()
         assert ARCHIVE.encode() not in file.read_bytes()
 
 
@@ -329,7 +331,7 @@ def test_failed_final_archive_exits_with_error(tmp_path, cloud, monkeypatch):
     dataset = _dataset(tmp_path, [("2021-01-04", "2021-01-04")])
     run = tmp_path / "run"
     window = WindowVerdict(0, None, None, None)
-    monkeypatch.setattr("atr_breakout.cli.study_case", lambda *a: (StageVerdict(window, window, None), {}))
+    monkeypatch.setattr("atr_breakout.cli.study_case", lambda *a, **kw: (StageVerdict(window, window, None), {}))
     cloud.fail_upload = True
     with pytest.raises(SystemExit, match="2"):
         main([
@@ -356,3 +358,35 @@ def test_fixed_remote_claim_blocks_new_output_directory_before_price_io_s8(tmp_p
     assert "remote holdout claim already exists" in capsys.readouterr().err
     assert cloud.calls == [("list", fixed)]
     assert not (run / "holdout.json").exists()
+
+
+
+def test_holdout_trade_rows_reconcile_with_reported_cases_s8_s10(tmp_path, monkeypatch):
+    import pyarrow.parquet as pq
+
+    from atr_breakout.runner import prepare_bars
+
+    dataset = _dataset(tmp_path, [("2023-01-03", "2023-01-03")])
+    run = tmp_path / "run"
+    _pass(run, dataset)
+    monkeypatch.setattr("atr_breakout.cli._code_commit", lambda **_: COMMIT)
+
+    def prepare(partitions, *_args, **_kwargs):
+        checksums = {day.isoformat(): checksum for day, _, checksum in partitions}
+        minutes = generate_frame()
+        minutes["ts_utc"] += pd.Timedelta(days=730)
+        return prepare_bars(minutes, "CRYPTO"), {}, checksums
+
+    monkeypatch.setattr("atr_breakout.cli.prepare_partitioned_bars", prepare)
+    assert main(["holdout", "--market", "US", "--data", str(dataset.manifest), "--out", str(run)]) == 0
+    rows = pq.read_table(run / "trades.parquet").to_pandas()
+    result = json.loads((run / "holdout.json").read_bytes())
+    assert set(rows["window"]) == {"holdout"}
+    assert set(rows["case"]) == {"gross", "base"}
+    assert rows["benchmark"].isna().all()
+    for case, column in (("gross", "r_gross"), ("base", "r_net_base")):
+        scoped = rows.loc[rows["case"].eq(case)]
+        taken = scoped.loc[scoped["status"].eq("TAKEN")]
+        assert len(taken) == result[case]["count"] > 0
+        assert scoped["status"].value_counts().to_dict() == result[case]["statuses"]
+        assert taken[column].mean() == pytest.approx(result[case]["mean_r"])

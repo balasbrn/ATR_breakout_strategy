@@ -5,26 +5,41 @@ to a folder outside the repository; only the small summaries in `runs/` are comm
 
 ## 1. Per-trade file (`trades.parquet`, private)
 
-One row per signal, including skipped ones. The Monte Carlo project reads this file and nothing
-else, so its columns are fixed here.
+One row per signal and simulated cost case, including skipped signals and
+benchmark attempts. The local file is cumulative. Stage A publishes gross
+rows, Stage B adds base and stress rows, and holdout adds gross and base rows
+for the reserved window. The Monte Carlo project reads this file and nothing else.
 
 | Column | Meaning |
 |---|---|
 | `trade_id` | unique id |
 | `market` | US, NSE, CRYPTO, FXGOLD |
 | `symbol` | real symbol (private file only) |
-| `window` | DEV or OOS |
-| `signal_ts_utc`, `entry_ts_utc`, `exit_ts_utc` | times; entry/exit null when skipped |
+| `window` | `dev`, `oos`, or `holdout`, assigned from the signal bar |
+| `case` | `gross`, `base`, or `stress` |
+| `signal_ts_utc`, `entry_ts_utc`, `exit_ts_utc` | Signal bar close, entry bar open, and exit bar close. Entry and exit are null when skipped |
 | `direction` | LONG / SHORT |
-| `status` | TAKEN, SKIPPED_BUSY, SKIPPED_GAP |
+| `status` | TAKEN, SKIPPED_BUSY, SKIPPED_GAP, SKIPPED_BOUNDARY, or SKIPPED_PURITY |
 | `exit_reason` | STOP, BAR5_EXIT, BREAKEVEN_STOP, MAX_HOLD |
 | `one_r_price` | 1R in price units |
-| `r_gross` | gross R (Stage A) |
-| `r_net_base`, `r_net_stress` | net R at base and stress cost (Stage B) |
+| `r_gross` | Gross R on taken gross-case rows |
+| `r_net_base`, `r_net_stress` | Net R on taken rows of the corresponding cost case |
 | `crosses_overnight` | cash markets: trade spans a session close |
 | `atr_rank_prev`, `impulse_atr` | the signal's own values |
 | `benchmark` | null for the strategy; `RANDOM` or `NO_COMPRESSION` for benchmark rows |
 | `seed` | random-entry seed, else null |
+
+Each taken row populates one return column. Skipped rows leave entry, exit,
+risk, and return fields null. Stop exits use the timestamp of the bar that
+observed the fill. Strategy metrics reconcile against rows with a null
+`benchmark`. Random rows preserve the seed and every draw, including repeated
+selections and rejected entry gaps. Buy-and-hold has no signal rows.
+
+The CLI writes the local artifact with owner-only permissions. Metrics JSON
+records the SHA-256 of the snapshot for that phase. With `--archive`, the file
+is verified under `trades/<phase>/trades.parquet` within the run archive so
+immutable uploads can coexist. Restore the latest applicable snapshot as
+`trades.parquet` in the run directory before resuming.
 
 ## 2. Run summary (`runs/<run_id>/summary.json`, committed)
 

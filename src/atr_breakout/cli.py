@@ -1,6 +1,7 @@
 """Command line for the pre-run v1 study and holdout review."""
 
 import argparse
+from contextlib import ExitStack
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -24,6 +25,7 @@ from atr_breakout.data.windows import claim_holdout, require_holdout_pass
 from atr_breakout.runner import holdout_case, prepare_partitioned_bars, strategy, study_case
 from atr_breakout.study.passrule import holdout_passed, read_stage_a, write_stage_a, write_stage_b
 from atr_breakout.core.costs import cost_basis_points
+from atr_breakout.trade_export import trade_digest, write_trade_export
 
 
 def _code_commit(*, require_clean: bool) -> str:
@@ -86,6 +88,12 @@ def _convert(args):
     print(manifest)
 
 
+def _verify_trade_snapshot(directory, metrics_file):
+    expected = json.loads((directory / metrics_file).read_bytes())["trades_sha256"]
+    if trade_digest(directory) != expected:
+        raise ValueError("trades.parquet checksum differs from the recorded snapshot")
+
+
 def _run(args, command):
     if args.action == "sessions":
         _write(args.out, session_schedule(args.market))
@@ -101,9 +109,13 @@ def _run(args, command):
     provenance = dataset.provenance(commit)
     if args.action == "stage-b":
         read_stage_a(args.out, provenance)
+        _verify_trade_snapshot(args.out, "gross_metrics.json")
     holdout_run = args.out if args.action == "holdout" else None
     if holdout_run and any((holdout_run / name).exists() for name in ("holdout_gross.json", "holdout.json")):
         raise ValueError("Holdout output already exists")
+    if holdout_run and (not dataset.synthetic or (args.out / "net_metrics.json").is_file()):
+        _verify_trade_snapshot(args.out, "net_metrics.json")
+
     def archive_claim(claim: Path) -> None:
         archive_holdout_evidence(
             holdout_run, claim, destination, market=dataset.market, manifest_sha256=dataset.sha256,
@@ -132,26 +144,35 @@ def _run(args, command):
     }
 
     if args.action == "stage-a":
-        verdict, metrics = study_case(frames, args.market, "gross")
-        write_stage_a(args.out, provenance, verdict)
-        _write(args.out / "gross_metrics.json", {**provenance, **execution, "gross": metrics})
+        with write_trade_export(args.out, args.market, append=False) as export:
+            verdict, metrics = study_case(frames, args.market, "gross", record=export.record)
+            write_stage_a(args.out, provenance, verdict)
+        _write(args.out / "gross_metrics.json", {
+            **provenance, **execution, "gross": metrics, "trades_sha256": trade_digest(args.out),
+        })
     elif args.action == "stage-b":
         cases = {}
+        with ExitStack() as stack:
+            export = stack.enter_context(write_trade_export(args.out, args.market, append=True))
 
-        def evaluate(case):
-            verdict, metrics = study_case(frames, args.market, case)
-            cases[case] = metrics
-            return verdict
+            def evaluate(case):
+                verdict, metrics = study_case(frames, args.market, case, record=export.record)
+                cases[case] = metrics
+                return verdict
 
-        passed = write_stage_b(args.out, provenance, evaluate)
-        _write(args.out / "net_metrics.json", {**provenance, **execution, **cases, "passed": passed})
+            passed = write_stage_b(args.out, provenance, evaluate, before_publish=stack.close)
+        _write(args.out / "net_metrics.json", {
+            **provenance, **execution, **cases, "passed": passed, "trades_sha256": trade_digest(args.out),
+        })
     elif args.action == "holdout":
-        gross = holdout_case(frames, args.market, "gross")
-        _write(args.out / "holdout_gross.json", {**provenance, **execution, "gross": gross})
-        base = holdout_case(frames, args.market, "base")
+        with write_trade_export(args.out, args.market, append=True) as export:
+            gross = holdout_case(frames, args.market, "gross", record=export.record)
+            _write(args.out / "holdout_gross.json", {**provenance, **execution, "gross": gross})
+            base = holdout_case(frames, args.market, "base", record=export.record)
         _write(args.out / "holdout.json", {
             **provenance, **execution, "gross": gross, "base": base,
             "passed": holdout_passed(gross["mean_r"], base["mean_r"]),
+            "trades_sha256": trade_digest(args.out),
         })
     else:
         keys = CardKeys({args.market: min(bars["trading_date"].min() for bars in frames.values())})
@@ -169,7 +190,8 @@ def _run(args, command):
             args.out, tables, schema_path=args.schema, code_commit=commit, synthetic=dataset.synthetic,
         )
     if destination:
-        archive_directory(args.out, destination)
+        trade_phase = args.action if args.action in ("stage-a", "stage-b", "holdout") else None
+        archive_directory(args.out, destination, trade_phase=trade_phase)
 
 
 def main(argv=None):

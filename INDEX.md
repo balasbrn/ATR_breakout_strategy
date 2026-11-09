@@ -54,6 +54,7 @@ cards/                event cards for the ML project (docs/event_cards.md)
 report/
   fill_report.py      fills v1/report.md "pending" cells from a run summary
 archive.py            immutable bucket upload and byte verification
+trade_export.py       private cumulative per-signal Parquet and checksums
 runner.py             connect permitted bars, simulations, and study metrics
 cli.py                one command per step (see §4)
 ```

@@ -99,6 +99,7 @@ def read_stage_a(directory: Path, provenance: dict) -> tuple[bool, str]:
 
 def write_stage_b(
     directory: Path, provenance: dict, evaluate: Callable[[CostCase], StageVerdict],
+    *, before_publish: Callable[[], None] | None = None,
 ) -> bool:
     """Check recorded gross evidence before invoking either net evaluation."""
     gross_passed, gross_hash = read_stage_a(directory, provenance)
@@ -109,6 +110,8 @@ def write_stage_b(
         pass
     base = evaluate("base")
     stress = evaluate("stress")
+    if before_publish is not None:
+        before_publish()
     net_hash = _write_json(directory / "stage_b.json", {
         **provenance, "base": asdict(base), "stress": asdict(stress), "passed": base.passed,
     })

@@ -165,7 +165,7 @@ def test_streaming_matches_eager_stage_files_metrics_and_card_bytes_s3_s6_s8(tmp
         for action in ("stage-a", "stage-b"):
             cli._run(SimpleNamespace(action=action, out=run_dir, **options), action)
         cli._run(SimpleNamespace(action="cards", out=card_dir, **options), "cards")
-        files = {path.name: path.read_bytes() for path in run_dir.glob("*.json")}
+        files = {path.name: path.read_bytes() for path in run_dir.iterdir() if path.suffix in (".json", ".parquet")}
         files.update({
             path.relative_to(card_dir).as_posix(): path.read_bytes()
             for path in card_dir.rglob("*") if path.is_file()

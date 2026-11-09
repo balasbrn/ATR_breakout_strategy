@@ -2,6 +2,7 @@
 
 from collections import Counter, defaultdict
 from datetime import date
+from functools import partial
 
 import pandas as pd
 
@@ -91,10 +92,8 @@ def strategy(frames, market, bp, window=None):
     for symbol, bars in frames.items():
         directions = signal_directions(bars)
         purity = crypto_entry_eligible(bars) if market == "CRYPTO" else None
-        eligible = directions if purity is None else directions.where(purity, 0)
-        if window is not None:
-            eligible = eligible.where(_between(bars["trading_date"], window), 0)
-        yield symbol, bars, directions, purity, simulate_trades(bars, eligible, cost_bp=bp)
+        scoped = directions if window is None else directions.where(_between(bars["trading_date"], window), 0)
+        yield symbol, bars, directions, purity, simulate_trades(bars, scoped, cost_bp=bp, purity=purity)
 
 
 def _trade_row(symbol, bars, result):
@@ -144,26 +143,35 @@ TRADE_COLUMNS = [
 ]
 
 
-def study_case(frames, market, case):
+def study_case(frames, market, case, *, record=None):
     bp = cost_basis_points(market, case)
     rows = []
     breakout = []
+    dev, oos, _ = STUDY_WINDOWS[market]
     for symbol, bars, _, _, results in strategy(frames, market, bp):
-        rows.extend(_trade_row(symbol, bars, result) for result in results)
-        breakout.extend(
-            _trade_row(symbol, bars, result)
-            for result in without_compression(bars, market=market, cost_bp=bp)
-        )
+        for label, signals, target in (
+            (None, results, rows),
+            ("NO_COMPRESSION", without_compression(bars, market=market, cost_bp=bp), breakout),
+        ):
+            for result in signals:
+                row = _trade_row(symbol, bars, result)
+                target.append(row)
+                day = row["trading_date"]
+                if record and (dev[0] is None or day >= dev[0]) and day <= oos[1]:
+                    window = "dev" if day <= dev[1] else "oos"
+                    record(symbol, bars, result, case=case, window=window, benchmark=label)
     results = pd.DataFrame(rows, columns=TRADE_COLUMNS)
     breakout = pd.DataFrame(breakout, columns=TRADE_COLUMNS)
-    dev, oos, _ = STUDY_WINDOWS[market]
     taken_frames, random_means = [], []
     metrics = {}
     for name, window in (("dev", dev), ("oos", oos)):
         scoped = results.loc[_between(results["trading_date"], window)]
         taken = scoped.loc[scoped["status"].eq("TAKEN")]
         start = window[0] or date.min
-        benchmark = random_entry(frames, taken["direction"], market=market, cost_bp=bp, window=(start, window[1]))
+        benchmark = random_entry(
+            frames, taken["direction"], market=market, cost_bp=bp, window=(start, window[1]),
+            record=partial(record, case=case, window=name, benchmark="RANDOM") if record else None,
+        )
         no_compression = breakout.loc[
             _between(breakout["trading_date"], window) & breakout["status"].eq("TAKEN"), "r"
         ]
@@ -188,13 +196,12 @@ def study_case(frames, market, case):
     return verdict, metrics
 
 
-def holdout_case(frames, market, case):
+def holdout_case(frames, market, case, *, record=None):
     window = STUDY_WINDOWS[market][2]
-    rows = [
-        _trade_row(symbol, bars, result)
-        for symbol, bars, _, _, results in strategy(
-            frames, market, cost_basis_points(market, case), window,
-        )
-        for result in results
-    ]
+    rows = []
+    for symbol, bars, _, _, results in strategy(frames, market, cost_basis_points(market, case), window):
+        for result in results:
+            rows.append(_trade_row(symbol, bars, result))
+            if record:
+                record(symbol, bars, result, case=case, window="holdout")
     return _metrics(pd.DataFrame(rows, columns=TRADE_COLUMNS), market)
