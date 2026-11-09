@@ -12,6 +12,7 @@ import sys
 
 import pyarrow.fs as arrow_fs
 
+from atr_breakout.anon_export import export_anon
 from atr_breakout.archive import archive_destination, archive_directory, archive_holdout_evidence
 from atr_breakout.cards.anonymise import CardKeys
 from atr_breakout.cards.entry import CardContext
@@ -95,6 +96,9 @@ def _verify_trade_snapshot(directory, metrics_file):
 
 
 def _run(args, command):
+    if args.action == "export-anon":
+        export_anon(args.run, args.out)
+        return
     if args.action == "sessions":
         _write(args.out, session_schedule(args.market))
         return
@@ -200,6 +204,9 @@ def main(argv=None):
     sessions = actions.add_parser("sessions", help="Generate the DEV/OOS cash-session schedule")
     sessions.add_argument("--market", required=True, choices=CALENDARS)
     sessions.add_argument("--out", required=True, type=Path, help="New schedule JSON file")
+    anon = actions.add_parser("export-anon", help="Write a DEV/OOS anonymised trades export")
+    anon.add_argument("--run", required=True, type=Path, help="Run directory containing trades.parquet")
+    anon.add_argument("--out", required=True, type=Path, help="New output Parquet file")
     convert = actions.add_parser("convert", help="Convert Trade555 validated symbol files")
     convert.add_argument("--source", required=True, help="Runtime gs:// validated-layer prefix")
     convert.add_argument("--market", required=True, choices=STUDY_WINDOWS)

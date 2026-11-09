@@ -33,6 +33,15 @@ def test_stage_trade_rows_reconcile_with_verdicts_and_metrics_s6_s7_s9(tmp_path,
     assert pq.read_table(parquet).slice(0, len(stage_a)).equals(stage_a)
     assert set(all_rows["case"]) == {"gross", "base", "stress"}
     assert set(all_rows["window"]) == {"dev", "oos"}
+    anon = tmp_path / "anon.parquet"
+    assert cli.main(["export-anon", "--run", str(run), "--out", str(anon)]) == 0
+    exported = pq.read_table(anon).to_pandas()
+    assert exported.columns.tolist() == [
+        "market", "window", "case", "benchmark", "seed", "status", "day_index", "r",
+    ]
+    assert len(exported) == len(all_rows)
+    assert exported.loc[exported["status"].ne("TAKEN"), "r"].isna().all()
+    assert sorted(exported["day_index"].unique()) == list(range(exported["day_index"].nunique()))
     assert all_rows.loc[all_rows["status"].ne("TAKEN"), [
         "entry_ts_utc", "exit_ts_utc", "exit_reason", "one_r_price", *RETURN_COLUMNS.values(),
     ]].isna().all().all()
@@ -49,6 +58,11 @@ def test_stage_trade_rows_reconcile_with_verdicts_and_metrics_s6_s7_s9(tmp_path,
             assert len(taken) == metrics[window]["count"]
             assert taken[column].mean() == pytest.approx(verdict[window]["mean_r"])
             assert taken[column].mean() == pytest.approx(metrics[window]["mean_r"])
+            anon_taken = exported.loc[
+                exported["case"].eq(case) & exported["window"].eq(window)
+                & exported["benchmark"].isna() & exported["status"].eq("TAKEN"), "r"
+            ]
+            assert anon_taken.mean() == pytest.approx(verdict[window]["mean_r"])
             other_columns = set(RETURN_COLUMNS.values()) - {column}
             assert taken[list(other_columns)].isna().all().all()
 
