@@ -46,7 +46,7 @@ def generate_frame(seed=17):
     return pd.DataFrame.from_records(rows, columns=MINUTE_COLUMNS)
 
 
-def write_study_fixture(directory):
+def write_study_fixture(directory, *, symbols=("SYNTHETIC",)):
     """Write a small canonical CRYPTO dataset for the M4 dry run."""
     import hashlib
     import json
@@ -54,7 +54,10 @@ def write_study_fixture(directory):
     import pandas as pd
 
     directory.mkdir(mode=0o700)
-    frame = generate_frame()
+    frame = pd.concat(
+        [generate_frame(seed=17 + index).assign(symbol=symbol) for index, symbol in enumerate(symbols)],
+        ignore_index=True,
+    )
     partitions = []
     for offset in (0, 365):
         shifted = frame.assign(ts_utc=frame["ts_utc"] + pd.Timedelta(days=offset))

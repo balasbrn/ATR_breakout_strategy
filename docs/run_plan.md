@@ -95,3 +95,27 @@ before advancing to the next step.
    crypto exits after more than 20 UTC slots. This CLI produces JSON metrics.
    Private per-trade delivery and filling the frozen report template are
    follow-up integration tasks before publishing research results.
+
+## Streaming and VM memory budget
+
+The CLI verifies and aggregates one authorized trading-date partition at a
+time. It releases the minute frame before opening the next file and retains
+the 15-minute bars, plus H1, H4, and daily bars for cards. Crypto keeps one
+observed minute per symbol from the previous partition so gaps of at most
+three minutes can be filled across UTC midnight. Longer gaps stay missing.
+The real crypto annual completeness check remains an adapter prerequisite.
+
+These are planning estimates for DEV/OOS cards on atr-free (4 OCPU, 24 GB),
+using dense bar counts and allowing for pandas aggregation, indicator frames,
+and card export buffers. They are estimates of process peak memory, not VM
+measurements. The numbers vary with coverage, eligible symbols, and card counts.
+
+| Market | Estimated retained 15-minute rows | Expected peak memory |
+|---|---:|---:|
+| US | ~1.1 million (50 symbols) | 1–3 GiB |
+| NSE | ~11.7 million (233 symbols) | 7–11 GiB |
+| Crypto | up to ~1.1 million (3 coins, 10 years each) | 1–3 GiB |
+| FX and gold | ~2.4 million (8 instruments assumed) | 2–4 GiB |
+
+The acceptance target is below 12 GB peak RSS for NSE DEV/OOS cards.
+Record the actual peak RSS on atr-free before treating that target as verified.

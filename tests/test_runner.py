@@ -211,7 +211,7 @@ ARCHIVE = "gs://test-fixture/private"
 def test_real_cli_requires_archive_before_price_io_s8(tmp_path, monkeypatch, action):
     path = tmp_path / "minutes.json"
     path.write_text(json.dumps({"market": "US", "synthetic": False, "partitions": []}))
-    monkeypatch.setattr("atr_breakout.cli.load_minutes", lambda *a, **kw: pytest.fail("unexpected price I/O"))
+    monkeypatch.setattr("atr_breakout.cli.iter_minute_partitions", lambda *a, **kw: pytest.fail("unexpected price I/O"))
     args = [action, "--market", "US", "--data", str(path), "--out", str(tmp_path / "run")]
     if action == "cards":
         args += ["--schema", "unused.json"]

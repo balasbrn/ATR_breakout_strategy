@@ -1,6 +1,6 @@
 """Read date-partitioned canonical minute files through the v1 window gate."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import date
 import hashlib
@@ -65,11 +65,11 @@ def _read_partition(path: Path, day: date, zone: str) -> tuple[pd.DataFrame, str
     return frame, checksum
 
 
-def load_minutes(
+def iter_minute_partitions(
     dataset: Dataset, *, commit: str, holdout_run: Path | None = None,
     archive_claim: Callable[[Path], None] | None = None,
-) -> tuple[pd.DataFrame, dict[str, str]]:
-    """Read only selected dates. Supplying a holdout run always invokes the gate."""
+) -> Iterator[tuple[date, pd.DataFrame, str]]:
+    """Yield validated daily partitions in order after any required holdout gate."""
     if dataset.market == "CRYPTO" and not dataset.synthetic:
         raise ValueError("Real crypto requires the approved completeness and gap-fill adapter")
     holdout = holdout_run is not None
@@ -87,7 +87,7 @@ def load_minutes(
     start, end = allowed_dates(dataset.market, holdout=False)
     if holdout:
         _, end = allowed_dates(dataset.market, holdout=True)
-    frames, checksums = [], {}
+    found = False
     root = dataset.manifest.parent
     for day, (relative, expected) in sorted(dataset.partitions.items()):
         if (start is not None and day < start) or day > end:
@@ -98,8 +98,22 @@ def load_minutes(
         frame, checksum = _read_partition(path, day, MARKET_ZONES[dataset.market])
         if checksum != expected:
             raise ValueError(f"Partition checksum differs from manifest: {day}")
+        found = True
+        yield day, frame, checksum
+        del frame
+    if not found:
+        raise ValueError("No minute partitions in the authorized window")
+
+
+def load_minutes(
+    dataset: Dataset, *, commit: str, holdout_run: Path | None = None,
+    archive_claim: Callable[[Path], None] | None = None,
+) -> tuple[pd.DataFrame, dict[str, str]]:
+    """Read a small dataset into one frame. Study commands use the iterator."""
+    frames, checksums = [], {}
+    for day, frame, checksum in iter_minute_partitions(
+        dataset, commit=commit, holdout_run=holdout_run, archive_claim=archive_claim,
+    ):
         frames.append(frame)
         checksums[day.isoformat()] = checksum
-    if not frames:
-        raise ValueError("No minute partitions in the authorized window")
     return pd.concat(frames, ignore_index=True), checksums

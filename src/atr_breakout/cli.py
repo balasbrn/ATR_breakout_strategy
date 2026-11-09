@@ -11,14 +11,13 @@ import sys
 
 from atr_breakout.archive import archive_destination, archive_directory, archive_holdout_evidence
 from atr_breakout.cards.anonymise import CardKeys
-from atr_breakout.cards.context import higher_timeframes
 from atr_breakout.cards.entry import CardContext
 from atr_breakout.cards.outcome import build_cards
 from atr_breakout.cards.writer import write_cards
 from atr_breakout.contract_v1 import STUDY_WINDOWS
-from atr_breakout.data.partitions import load_minutes, open_dataset
+from atr_breakout.data.partitions import iter_minute_partitions, open_dataset
 from atr_breakout.data.sessions import CALENDARS, session_schedule
-from atr_breakout.runner import holdout_case, prepare_bars, strategy, study_case
+from atr_breakout.runner import holdout_case, prepare_partitioned_bars, strategy, study_case
 from atr_breakout.study.passrule import holdout_passed, read_stage_a, write_stage_a, write_stage_b
 from atr_breakout.core.costs import cost_basis_points
 
@@ -69,11 +68,20 @@ def _run(args, command):
             holdout_run, claim, destination, market=dataset.market, manifest_sha256=dataset.sha256,
         )
 
-    minutes, checksums = load_minutes(
+    sessions = None
+    if args.action == "cards" and args.sessions:
+        sessions = json.loads(args.sessions.read_text())
+        if isinstance(sessions, dict):
+            if sessions["market"] != args.market:
+                raise ValueError("Session schedule market does not match the cards market")
+            sessions = sessions["sessions"]
+    partitions = iter_minute_partitions(
         dataset, commit=commit, holdout_run=holdout_run,
         archive_claim=archive_claim if holdout_run and destination else None,
     )
-    frames = prepare_bars(minutes, args.market)
+    frames, higher, checksums = prepare_partitioned_bars(
+        partitions, args.market, cards=args.action == "cards", sessions=sessions,
+    )
     provenance["input_sha256"] = checksums
     execution = {
         "command": command,
@@ -105,12 +113,6 @@ def _run(args, command):
     else:
         keys = CardKeys({args.market: min(bars["trading_date"].min() for bars in frames.values())})
         tables = {name: [] for name in ("entry", "exit", "outcome", "event_map")}
-        sessions = json.loads(args.sessions.read_text()) if args.sessions else None
-        if isinstance(sessions, dict):
-            if sessions["market"] != args.market:
-                raise ValueError("Session schedule market does not match the cards market")
-            sessions = sessions["sessions"]
-        higher = higher_timeframes(minutes, args.market, sessions=sessions)
         for symbol, bars, directions, purity, actual in strategy(
             frames, args.market, cost_basis_points(args.market, "base"),
         ):
