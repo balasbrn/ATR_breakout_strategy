@@ -155,7 +155,7 @@ def cloud(monkeypatch):
 
     from atr_breakout import archive
 
-    state = SimpleNamespace(objects={}, calls=[], fail_upload=False, fail_read=False)
+    state = SimpleNamespace(objects={}, calls=[], fail_upload=False, fail_read=False, fail_list=False)
 
     def upload(argv, *, check):
         assert argv[:4] == ["gcloud", "storage", "cp", "--no-clobber"]
@@ -185,6 +185,15 @@ def cloud(monkeypatch):
     original = subprocess.run
 
     def run(argv, **kwargs):
+        if argv[:3] == ["gcloud", "storage", "ls"]:
+            assert kwargs == {"capture_output": True, "text": True}
+            target = argv[3]
+            state.calls.append(("list", target))
+            if state.fail_list:
+                return SimpleNamespace(returncode=1, stderr="Permission denied")
+            if target in state.objects:
+                return SimpleNamespace(returncode=0, stderr="")
+            return SimpleNamespace(returncode=1, stderr="ERROR: One or more URLs matched no objects.")
         if argv[0] == "gcloud":
             return upload(argv, **kwargs)
         return original(argv, **kwargs)
@@ -267,7 +276,7 @@ def test_holdout_archive_evidence_verified_before_any_partition_read_s8_s10(tmp_
     assert f"{ARCHIVE}/run/holdout.json" in cloud.objects
 
 
-@pytest.mark.parametrize("failure", ["upload", "read", "size", "hash", "old_claim"])
+@pytest.mark.parametrize("failure", ["upload", "read", "size", "hash", "list", "identical_claim"])
 def test_failed_holdout_archive_spends_claim_without_reading_prices_s8_s10(
     tmp_path, monkeypatch, cloud, failure,
 ):
@@ -285,14 +294,28 @@ def test_failed_holdout_archive_spends_claim_without_reading_prices_s8_s10(
     elif failure == "hash":
         payload = (run / "stage_a.json").read_bytes()
         cloud.objects[f"{ARCHIVE}/run/stage_a.json"] = b"x" + payload[1:]
+    elif failure == "list":
+        cloud.fail_list = True
     else:
-        cloud.objects[f"{ARCHIVE}/run/.v1-US-holdout.claim"] = b"old attempt"
+        create_claim = partitions.claim_holdout
+
+        def restore_existing_remote_claim(*args):
+            claim = create_claim(*args)
+            cloud.objects[f"{ARCHIVE}/run/{claim.name}"] = claim.read_bytes()
+            return claim
+
+        monkeypatch.setattr(partitions, "claim_holdout", restore_existing_remote_claim)
     with pytest.raises(SystemExit, match="2"):
         main([
             "holdout", "--market", "US", "--data", str(dataset.manifest),
             "--out", str(run), "--archive", ARCHIVE,
         ])
-    assert (dataset.manifest.parent / ".v1-US-holdout.claim").is_file()
+    claim = dataset.manifest.parent / ".v1-US-holdout.claim"
+    record = json.loads(claim.read_bytes())
+    assert record["attempt_id"]
+    assert record["claimed_at_utc"].endswith("+00:00")
+    if failure in ("list", "identical_claim"):
+        assert cloud.calls == [("list", f"{ARCHIVE}/run/{claim.name}")]
     assert not (run / "holdout.json").exists()
 
 

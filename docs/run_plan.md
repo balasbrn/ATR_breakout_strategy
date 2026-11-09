@@ -74,8 +74,9 @@ before advancing to the next step.
    the holdout simulation. Crypto 2025+ is outside every permitted range.
 4. The canonical dataset directory must be writable for the exclusive holdout
    claim. Before opening any price partition, the runner archives and verifies
-   the claim plus `stage_a.json`, `stage_b.json`, and `pass.json`. An upload or
-   verification failure stops the run and leaves the attempt spent. Preserve
+   the claim plus `stage_a.json`, `stage_b.json`, and `pass.json`. The runner
+   first checks that the remote claim is absent, which requires list access.
+   A failed check, upload, or verification stops the run and leaves the attempt spent. Preserve
    the claim in the canonical dataset directory. If the VM is replaced,
    restore the archived run files and claim to their original locations.
    Keep the same archive prefix and run ID so any existing remote claim

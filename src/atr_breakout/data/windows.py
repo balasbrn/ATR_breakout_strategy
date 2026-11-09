@@ -1,6 +1,6 @@
 """Verify stage evidence and authorize market trading dates before input I/O."""
 
-from datetime import date
+from datetime import date, datetime, timezone
 import hashlib
 import json
 import math
@@ -72,7 +72,11 @@ def claim_holdout(manifest: Path, market: str, provenance: dict) -> Path:
     claim = manifest.parent / f".v1-{market}-holdout.claim"
     try:
         with claim.open("x") as output:
-            json.dump({**provenance, "attempt_id": str(uuid4())}, output)
+            json.dump({
+                **provenance,
+                "attempt_id": str(uuid4()),
+                "claimed_at_utc": datetime.now(timezone.utc).isoformat(),
+            }, output)
     except FileExistsError as error:
         raise HoldoutLocked("This dataset and market already claimed its v1 holdout") from error
     return claim
