@@ -49,7 +49,9 @@ def _inventory(filesystem, root, market):
         if market == "US" and symbol == "GOOG":
             excluded[symbol] = "contract §2: one company, GOOGL kept"
             continue
-        if not re.fullmatch(r"[A-Za-z0-9_.-]+", symbol):
+        # Contract §2 NSE universe includes M&M and GVT&D. A symbol is only a column
+        # value; partitions are named by date and archive paths never use symbols.
+        if not re.fullmatch(r"[A-Za-z0-9_.&-]+", symbol):
             raise ValueError("Invalid symbol partition name")
         with filesystem.open_input_file(files["audit.json"].path) as source:
             audit = source.read()

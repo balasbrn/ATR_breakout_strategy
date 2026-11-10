@@ -239,3 +239,25 @@ def test_inventory_refuses_incomplete_symbol_even_with_complete_peer(tmp_path, m
 
     with pytest.raises(ValueError, match=rf"Missing {re.escape(missing)} for validated symbol FAKE_INCOMPLETE"):
         _inventory(fs.LocalFileSystem(), str(root), "US")
+
+
+def test_inventory_keeps_nse_symbols_with_ampersand_s2(tmp_path):
+    from atr_breakout.data.validated import _inventory
+
+    root = tmp_path / "validated"
+    names = ["M&M", "GVT&D", "BAJAJ-AUTO"]
+    for name in names:
+        _source(root, dataset="nse", symbol=name)
+    symbols, excluded = _inventory(fs.LocalFileSystem(), str(root), "NSE")
+    assert sorted(symbols) == sorted(names)
+    assert not excluded
+
+
+@pytest.mark.parametrize("name", ["BAD NAME", "BAD;NAME", "BAD$NAME"])
+def test_inventory_still_refuses_other_symbol_characters_s2(tmp_path, name):
+    from atr_breakout.data.validated import _inventory
+
+    root = tmp_path / "validated"
+    _source(root, dataset="nse", symbol=name)
+    with pytest.raises(ValueError, match="Invalid symbol partition name"):
+        _inventory(fs.LocalFileSystem(), str(root), "NSE")
