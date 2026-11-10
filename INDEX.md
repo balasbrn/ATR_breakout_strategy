@@ -53,6 +53,7 @@ cards/                event cards for the ML project (docs/event_cards.md)
   writer.py           parquet by day_key + manifest + sha256 sidecar
 report/
   fill_report.py      fills v1/report.md "pending" cells from a run summary
+anon_export.py        allowlisted DEV/OOS export for the Monte Carlo add-on
 archive.py            immutable bucket upload and byte verification
 trade_export.py       private cumulative per-signal Parquet and checksums
 runner.py             connect permitted bars, simulations, and study metrics
@@ -83,6 +84,7 @@ and a synthetic dry run.
 python -m synthetic.generate --out <dir>
 atr-bo convert --market US --phase study --source <gs-prefix> --out <canonical-dir>
 atr-bo stage-a --data <manifest> --market US --out <run-dir>
+atr-bo export-anon --run <run-dir> --out <anon.parquet>
 atr-bo stage-b --data <manifest> --market US --out <run-dir>
 atr-bo holdout --data <manifest> --market US --out <run-dir>
 atr-bo sessions --market US --out <schedule>
