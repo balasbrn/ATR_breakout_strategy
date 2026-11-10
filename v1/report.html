@@ -100,15 +100,15 @@ footer { color: var(--muted); font-size: .8rem; border-top: 1px solid var(--bord
 <body>
 <div class="wrap">
   <header>
-    <div class="badges"><span class="badge b-frozen">Trade_research3</span><span class="badge b-frozen">Pre-registration · frozen 2026-11-05</span><span class="badge b-pend">Results pending</span><span class="badge b-warn">Pass 1 · bare signal, no filters</span></div>
+    <div class="badges"><span class="badge b-frozen">Trade_research3</span><span class="badge b-frozen">Pre-registration · frozen 2026-11-05</span><span class="badge b-bad">Study closed</span><span class="badge b-warn">Pass 1 · bare signal, no filters</span></div>
     <h1>ATR_breakout_strategy</h1>
     <div class="sub" style="font-size:.95rem;color:var(--ink)">ATR-compressed 20-bar high/low breakout · version v1</div>
     <p>After a quiet stretch, does a strong 15-minute close beyond the last 20 bars' extreme keep going far enough to pay for itself? Tested first <b>before costs</b> (is there any edge at all?), then <b>after costs</b> (is it still profitable?), on each market separately.</p>
     <div class="status">
       <div class="stat"><span class="k">Contract</span><span class="v">v1 · frozen</span><span class="sub">changes = v1.1, new contract</span></div>
-      <div class="stat"><span class="k">Stage A · gross</span><span class="v pend">not run</span></div>
-      <div class="stat"><span class="k">Stage B · net</span><span class="v pend">not run</span></div>
-      <div class="stat"><span class="k">Holdout</span><span class="v pend">locked</span><span class="sub">runs once, only if A and B pass</span></div>
+      <div class="stat"><span class="k">Stage A · gross</span><span class="v">US and NSE failed</span><span class="sub">Crypto and FX/gold not run</span></div>
+      <div class="stat"><span class="k">Stage B · net</span><span class="v">US and NSE failed</span><span class="sub">Crypto and FX/gold not run</span></div>
+      <div class="stat"><span class="k">Holdout</span><span class="v pend">locked (Stage A failed)</span><span class="sub">No holdout opened</span></div>
     </div>
   </header>
 
@@ -202,10 +202,10 @@ Any remaining → exit at Close[t+20]</pre><p>Stops checked intrabar; a hit exit
 
   <section aria-labelledby="hscore">
     <h2 id="hscore"><span class="sec">§10</span>Scorecard</h2>
-    <p>Every cell fills in when the run is published. A spoke survives only if all four rules pass on development <b>and</b> out-of-sample, in <b>both</b> stages.</p>
+    <p>A spoke survives only if all four rules pass on development <b>and</b> out-of-sample, in <b>both</b> stages.</p>
     <div class="seg" role="group" aria-label="Stage"><button type="button" id="st-a" aria-pressed="true">Stage A · gross</button><button type="button" id="st-b" aria-pressed="false">Stage B · net, base</button></div>
     <div class="tablewrap"><table id="score"></table></div>
-    <div class="legend"><span><span class="badge b-good">pass</span></span><span><span class="badge b-bad">fail</span></span><span><span class="cell">pending</span> not yet run</span></div>
+    <div class="legend"><span><span class="badge b-good">pass</span></span><span><span class="badge b-bad">fail</span></span><span><span class="cell">not run</span></span></div>
   </section>
 
   <section aria-labelledby="hmet">
@@ -333,13 +333,77 @@ document.getElementById("flow").innerHTML = [
   sp.addEventListener("change", upd); rk.addEventListener("input", upd); upd();
 })();
 
-/* Scorecard template */
+/* Closed-study scorecard */
 const SPOKES = ["US stocks", "NSE", "Crypto", "FX and gold"];
 const RULES = [["1", "Mean R > 0"], ["2", "Mean R > random entry"], ["3", "Mean R > 0 without best symbol"], ["4", "t ≥ 2 (dev + OOS, clustered by date)"]];
+const SCORE = {
+  gross: {
+    "US stocks": [
+      ["pass · 0.09694180261076392", "pass · 0.015691553032018357"],
+      ["fail · 0.09694180261076392 vs 0.2614028176513953", "fail · 0.015691553032018357 vs 0.21503534889253523"],
+      ["pass · 0.08508541463169829", "pass · 0.005291040449486489"],
+      ["pass · 2.700401043401606"],
+      ["fail"],
+    ],
+    "NSE": [
+      ["pass · 0.025473504852672708", "pass · 0.0579243658365287"],
+      ["fail · 0.025473504852672708 vs 0.19206341770740057", "fail · 0.0579243658365287 vs 0.15701600232300955"],
+      ["pass · 0.01969897246616931", "pass · 0.05122381571367225"],
+      ["pass · 3.1389516650488285"],
+      ["fail"],
+    ],
+    "Crypto": [
+      ["not run", "not run"],
+      ["not run", "not run"],
+      ["not run", "not run"],
+      ["not run"],
+      ["not run"],
+    ],
+    "FX and gold": [
+      ["not run", "not run"],
+      ["not run", "not run"],
+      ["not run", "not run"],
+      ["not run"],
+      ["not run"],
+    ],
+  },
+  base: {
+    "US stocks": [
+      ["pass · 0.017157127606902887", "fail · -0.04781729074996655"],
+      ["pass · 0.017157127606902887 vs -0.7652737051222398", "pass · -0.04781729074996655 vs -0.5839583841534874"],
+      ["pass · 0.005724696566125945", "fail · -0.05842531654744106"],
+      ["fail · -0.09530392945837304"],
+      ["fail"],
+    ],
+    "NSE": [
+      ["fail · -0.12827607633775673", "fail · -0.08371071520628426"],
+      ["pass · -0.12827607633775673 vs -1.0378597052439074", "pass · -0.08371071520628426 vs -1.2040382274424473"],
+      ["fail · -0.13353301929952216", "fail · -0.08983424355110683"],
+      ["fail · -10.53076159337139"],
+      ["fail"],
+    ],
+    "Crypto": [
+      ["not run", "not run"],
+      ["not run", "not run"],
+      ["not run", "not run"],
+      ["not run"],
+      ["not run"],
+    ],
+    "FX and gold": [
+      ["not run", "not run"],
+      ["not run", "not run"],
+      ["not run", "not run"],
+      ["not run"],
+      ["not run"],
+    ],
+  },
+};
 function score(stage) {
+  const results = SCORE[stage.startsWith("Stage A") ? "gross" : "base"];
+  const cell = (value, span = 1) => `<td colspan="${span}"><span class="cell">${value}</span></td>`;
   const head = `<thead><tr><th>Rule · ${stage}</th>${SPOKES.map(s => `<th colspan="2">${s}</th>`).join("")}</tr><tr><th></th>${SPOKES.map(() => "<th>Dev</th><th>OOS</th>").join("")}</tr></thead>`;
-  const body = RULES.map(([n, t]) => `<tr><td>${n} · ${t}</td>${SPOKES.map(() => n === "4" ? `<td colspan="2"><span class="cell">pending</span></td>` : `<td><span class="cell">pending</span></td><td><span class="cell">pending</span></td>`).join("")}</tr>`).join("");
-  const verdict = `<tr><td><b>Spoke verdict</b></td>${SPOKES.map(() => `<td colspan="2"><span class="cell">pending</span></td>`).join("")}</tr>`;
+  const body = RULES.map(([n, t], i) => `<tr><td>${n} · ${t}</td>${SPOKES.map(s => results[s][i].map(value => cell(value, n === "4" ? 2 : 1)).join("")).join("")}</tr>`).join("");
+  const verdict = `<tr><td><b>Spoke verdict</b></td>${SPOKES.map(s => cell(results[s][4][0], 2)).join("")}</tr>`;
   document.getElementById("score").innerHTML = head + "<tbody>" + body + verdict + "</tbody>";
 }
 for (const [id, s] of [["st-a", "Stage A · gross R"], ["st-b", "Stage B · net R, base"]]) document.getElementById(id).addEventListener("click", () => {

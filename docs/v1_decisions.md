@@ -76,3 +76,7 @@ Contract: random bar per market, same direction mix, same 1R rule, same 20-bar h
   contribution to the result), removed for rule 3.
 - **Buy-and-hold (context only):** equal-weighted mean of each symbol's percentage return over the
   window, from the first to the last available close. Reported in percent, not R.
+
+## Study closure
+
+OWNER 2026-11-10: study closed after US and NSE.
